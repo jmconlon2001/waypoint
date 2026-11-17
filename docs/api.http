@@ -1,0 +1,57 @@
+# Requests for the VS Code REST Client extension (humao.rest-client).
+# Against `dotnet run` use 5080; against the Podman pod use 8081 (or 8080 through nginx).
+@base = http://localhost:5080/api
+
+### Health
+GET {{base}}/health
+
+### Settings
+GET {{base}}/settings
+
+### Quick add a task for today
+POST {{base}}/tasks/quick-add
+Content-Type: application/json
+
+{ "text": "Review AG failover #origination !1", "today": true }
+
+### Today's tasks
+GET {{base}}/tasks/today
+
+### Start a timer on task 1
+POST {{base}}/timer/start
+Content-Type: application/json
+
+{ "taskId": 1 }
+
+### Timer state (running entry, warnings, open interruption, pinned tasks)
+GET {{base}}/timer
+
+### Interrupted (pauses the timer)
+POST {{base}}/interruptions/start
+Content-Type: application/json
+
+{ "sourceType": "WalkUp", "personName": "Dana", "note": "Access question" }
+
+### Back to work (resumes the paused task)
+POST {{base}}/interruptions/1/resume
+Content-Type: application/json
+
+{}
+
+### Convert an interruption into a task with its time
+POST {{base}}/interruptions/1/convert
+Content-Type: application/json
+
+{ "title": null, "projectId": 5, "status": "Done" }
+
+### Daily review (today when date is omitted)
+GET {{base}}/review
+
+### Fill a gap
+POST {{base}}/time-entries/fill-gap
+Content-Type: application/json
+
+{ "start": "2026-11-17T13:45:00Z", "end": "2026-11-17T14:30:00Z", "projectId": 2, "kind": "Task", "note": null }
+
+### Daily totals
+GET {{base}}/reports/daily?date=2026-11-17

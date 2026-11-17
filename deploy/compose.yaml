@@ -1,0 +1,53 @@
+# Waypoint: run with `podman compose up -d --build` from this folder (or deploy/start.ps1).
+# Every published port is bound to 127.0.0.1, so nothing is reachable from the network.
+name: waypoint
+
+services:
+  db:
+    image: docker.io/library/postgres:17
+    container_name: waypoint-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${WAYPOINT_DB_NAME:-waypoint}
+      POSTGRES_USER: ${WAYPOINT_DB_USER:-waypoint}
+      POSTGRES_PASSWORD: ${WAYPOINT_DB_PASSWORD:-waypoint}
+    volumes:
+      - waypoint-pgdata:/var/lib/postgresql/data
+    ports:
+      # Handy for `dotnet run` against the container DB and for SQL tools. Remove if not needed.
+      - "127.0.0.1:${WAYPOINT_DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ../api
+    image: localhost/waypoint-api:latest
+    container_name: waypoint-api
+    restart: unless-stopped
+    environment:
+      ConnectionStrings__Waypoint: "Host=db;Port=5432;Database=${WAYPOINT_DB_NAME:-waypoint};Username=${WAYPOINT_DB_USER:-waypoint};Password=${WAYPOINT_DB_PASSWORD:-waypoint}"
+      ASPNETCORE_ENVIRONMENT: Production
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Direct API access (curl, debugging). The web container proxies /api, so this is optional.
+      - "127.0.0.1:${WAYPOINT_API_PORT:-8081}:8080"
+
+  web:
+    build:
+      context: ../web
+    image: localhost/waypoint-web:latest
+    container_name: waypoint-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:${WAYPOINT_WEB_PORT:-8080}:80"
+
+volumes:
+  waypoint-pgdata:

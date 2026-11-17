@@ -1,0 +1,133 @@
+<div class="app-shell" [class.nav-open]="ui.navOpen()">
+  <aside class="sidebar" aria-label="Main navigation">
+    <div class="sidebar-brand">
+      <a routerLink="/">
+        <span class="brand-mark"><span class="i i-compass"></span></span>
+        <span class="brand-text">Waypoint<small>Where the day went</small></span>
+      </a>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">Work</div>
+      <a class="nav-item-link" routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+        <span class="i i-sunrise"></span><span class="nav-label">Today</span>
+      </a>
+      <a class="nav-item-link" routerLink="/tasks" routerLinkActive="active">
+        <span class="i i-list"></span><span class="nav-label">Tasks</span>
+      </a>
+      <a class="nav-item-link" routerLink="/review" routerLinkActive="active">
+        <span class="i i-timeline"></span><span class="nav-label">Daily review</span>
+      </a>
+
+      @if (timer.pinned().length) {
+        <div class="nav-section">Pinned</div>
+        @for (p of timer.pinned(); track p.slot) {
+          <button type="button" class="nav-item-link w-100 border-0 bg-transparent text-start" (click)="timer.startPinned(p.slot)"
+                  [class.active]="timer.running()?.taskId === p.taskId" [title]="'Start ' + p.title">
+            <span class="project-dot" [style.--pc]="p.projectColor"></span>
+            <span class="nav-label">{{ p.title }}</span>
+            <span class="pin-key">{{ p.slot }}</span>
+          </button>
+        }
+      }
+
+      <div class="nav-section">Setup</div>
+      <a class="nav-item-link" routerLink="/settings" routerLinkActive="active">
+        <span class="i i-settings"></span><span class="nav-label">Projects &amp; settings</span>
+      </a>
+      <button type="button" class="nav-item-link w-100 border-0 bg-transparent text-start" (click)="ui.shortcutsOpen.set(true)">
+        <span class="i i-keyboard"></span><span class="nav-label">Keyboard shortcuts</span><span class="pin-key">?</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-footer-text">
+        <strong>Local only</strong>
+        Data stays on this machine
+      </div>
+      <button type="button" class="icon-btn icon-btn-dark" (click)="theme.toggle()" title="Toggle light/dark theme" aria-label="Toggle theme">
+        <span class="i i-moon theme-dark-hide"></span><span class="i i-sun theme-light-hide"></span>
+      </button>
+    </div>
+  </aside>
+  <div class="sidebar-scrim" (click)="ui.navOpen.set(false)"></div>
+
+  <div class="main">
+    <header class="topbar">
+      <button type="button" class="icon-btn menu-btn" (click)="ui.navOpen.set(!ui.navOpen())" aria-label="Open menu">
+        <span class="i i-menu"></span>
+      </button>
+      <a class="topbar-brand" routerLink="/">
+        <span class="brand-mark"><span class="i i-compass"></span></span> Waypoint
+      </a>
+
+      @if (timer.interruption(); as i) {
+        <button type="button" class="topbar-chip interrupt-chip" (click)="timer.interruptionFormOpen.set(true)" title="Edit interruption">
+          <span class="dot dot-warning"></span> Interrupted <span class="timer-elapsed">{{ timer.interruptionElapsed() }}</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-primary" (click)="timer.backToWork()" [disabled]="timer.busy()">
+          <span class="i i-corner-down-right"></span> Back to work <kbd class="d-none d-md-inline-block ms-1">b</kbd>
+        </button>
+      } @else if (timer.running(); as r) {
+        <span class="topbar-chip timer-chip" [title]="r.taskTitle ?? r.projectName ?? 'Timer'">
+          <span class="dot dot-live"></span>
+          <span class="timer-title">{{ r.taskTitle ?? r.projectName ?? 'Untracked' }}</span>
+          <span class="timer-elapsed">{{ timer.elapsed() }}</span>
+        </span>
+        @if (timer.overThreshold() || timer.warnings().includes('crossed-midnight')) {
+          <span class="pill pill-warning" title="Still running? Stop it or fix the entry in the daily review.">
+            <span class="i i-alert"></span> {{ timer.warnings().includes('crossed-midnight') ? 'Crossed midnight' : 'Long timer' }}
+          </span>
+        }
+        <button type="button" class="icon-btn icon-btn-round" (click)="timer.stop()" title="Stop timer (s)" aria-label="Stop timer">
+          <span class="i i-stop"></span>
+        </button>
+        <button type="button" class="btn btn-sm btn-warning" (click)="timer.interrupt()" [disabled]="timer.busy()" title="Interrupted (i)">
+          <span class="i i-zap"></span> Interrupted
+        </button>
+      } @else {
+        <span class="topbar-chip idle-chip"><span class="dot"></span> No timer running</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="timer.interrupt()" [disabled]="timer.busy()" title="Log an interruption (i)">
+          <span class="i i-zap"></span> Interrupted
+        </button>
+      }
+
+      <span class="topbar-spacer"></span>
+      <button type="button" class="icon-btn icon-btn-round" (click)="ui.entryEditor.set({ entry: null, date: settings.today() })" title="Log time (l)" aria-label="Log time">
+        <span class="i i-clock"></span>
+      </button>
+      <button type="button" class="icon-btn icon-btn-round" (click)="ui.taskEditor.set('new')" title="New task (n)" aria-label="New task">
+        <span class="i i-plus"></span>
+      </button>
+      <button type="button" class="icon-btn icon-btn-round" (click)="theme.toggle()" title="Toggle theme" aria-label="Toggle theme">
+        <span class="i i-moon theme-dark-hide"></span><span class="i i-sun theme-light-hide"></span>
+      </button>
+    </header>
+
+    <main class="content">
+      <router-outlet />
+    </main>
+  </div>
+</div>
+
+@if (timer.interruptionFormOpen() && timer.interruption()) {
+  <app-interruption-form />
+}
+@if (ui.taskEditor() !== null) {
+  <app-task-editor />
+}
+@if (ui.entryEditor() !== null) {
+  <app-entry-editor />
+}
+@if (ui.shortcutsOpen()) {
+  <app-shortcuts-help />
+}
+
+<div class="toast-stack" aria-live="polite">
+  @for (t of toast.toasts(); track t.id) {
+    <div class="sm-toast" [class.error]="t.kind === 'error'" [class.warning]="t.kind === 'warning'" (click)="toast.dismiss(t.id)">
+      <span class="i" [class.i-check]="t.kind === 'success'" [class.i-alert]="t.kind !== 'success'"></span>
+      {{ t.text }}
+    </div>
+  }
+</div>
