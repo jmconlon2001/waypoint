@@ -540,3 +540,106 @@ button.topbar-chip { cursor: pointer; }
     .timer-hero .timer-big { font-size: 1.9rem; margin-left: 0; }
 }
 .ribbon-scale span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+
+/* ---- Phase 2: meetings, insights, planning ---- */
+
+/* Time-kind series. Validated (OKLab, CVD-safe adjacent pairs) for the light and dark surfaces; fixed order:
+   focus, meetings, reactive, untracked (neutral), unlogged (hatch). */
+:root, [data-bs-theme=light] {
+    --wp-kind-focus: #2563eb;
+    --wp-kind-meeting: #db2777;
+    --wp-kind-reactive: #0891b2;
+    --wp-kind-untracked: #94a3b8;
+    --wp-unplanned: color-mix(in srgb, #2563eb 40%, var(--sm-surface));
+    --wp-heat-1: #dbeafe; --wp-heat-2: #93c5fd; --wp-heat-3: #60a5fa; --wp-heat-4: #2563eb; --wp-heat-5: #1e40af;
+}
+[data-bs-theme=dark] {
+    --wp-kind-focus: #3b82f6;
+    --wp-kind-meeting: #ec4899;
+    --wp-kind-reactive: #0891b2;
+    --wp-kind-untracked: #64748b;
+    --wp-unplanned: color-mix(in srgb, #3b82f6 45%, var(--sm-surface));
+    /* Sequential ramps flip their anchor in dark mode: more = lighter. */
+    --wp-heat-1: #1e3a8a; --wp-heat-2: #1d4ed8; --wp-heat-3: #3b82f6; --wp-heat-4: #60a5fa; --wp-heat-5: #bfdbfe;
+}
+
+.stat-icon.tint-pink { background: rgba(219, 39, 119, .12); color: #db2777; }
+[data-bs-theme=dark] .stat-icon.tint-pink { color: #f9a8d4; }
+
+/* Meetings on the review timeline */
+.tl-item.meeting { border-left-color: var(--wp-kind-meeting); background: color-mix(in srgb, var(--wp-kind-meeting) 5%, transparent); }
+.tl-item.meeting.focus-time { border-left: 3px dashed var(--wp-kind-focus); background: transparent; }
+.tl-item.meeting.excluded { border-left: 3px dotted var(--sm-border); background: transparent; opacity: .7; }
+.tl-item.meeting .tl-title .i { color: var(--wp-kind-meeting); }
+.tl-item.meeting.focus-time .tl-title .i { color: var(--wp-kind-focus); }
+.ribbon-seg.meeting { top: 0; height: 30%; background: var(--wp-kind-meeting); border-radius: 0 0 3px 3px; box-shadow: 0 0 0 1px var(--sm-surface-2); z-index: 1; }
+.ribbon-seg.focus { top: 0; height: 30%; background: transparent; border: 2px dashed var(--wp-kind-focus); border-top: 0; border-radius: 0 0 3px 3px; }
+
+/* Stacked bar (planned vs. actual): 2px surface gaps between fills, rounded ends */
+.stacked-bar { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; background: var(--sm-surface-2); }
+.stacked-bar .seg { flex-basis: 0; min-width: 3px; }
+.plan-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: .5rem; align-items: center; padding: .3rem 0; font-size: .88rem; border-bottom: 1px dashed var(--sm-border); }
+.plan-row:last-child { border-bottom: 0; }
+.plan-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-row .num { font-family: var(--sm-mono); font-size: .8rem; }
+.nav-section-inline { font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--sm-muted); margin: .9rem 0 .4rem; }
+
+/* Roll-over list */
+.roll-list { list-style: none; margin: 0; padding: .4rem 0 0; }
+.roll-list li { padding: .45rem 1.1rem; border-bottom: 1px solid var(--sm-border); }
+.roll-list .form-check { display: flex; gap: .6rem; align-items: flex-start; padding-left: 0; }
+.roll-list .form-check-input { margin: .2rem 0 0; flex: none; float: none; }
+
+/* Weekly stacked columns */
+.week-chart { display: grid; grid-template-columns: 34px 1fr; height: 260px; padding-bottom: 2.4rem; }
+.week-axis { position: relative; font-family: var(--sm-mono); font-size: .7rem; color: var(--sm-muted); }
+.week-axis span { position: absolute; right: .5rem; transform: translateY(50%); }
+.week-plot { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 1rem; align-items: end; border-bottom: 1px solid var(--sm-border); }
+.week-grid { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed color-mix(in srgb, var(--sm-border) 80%, transparent); pointer-events: none; }
+.week-col { position: relative; height: 100%; display: flex; align-items: flex-end; justify-content: center; outline: none; cursor: default; }
+.week-col:hover .week-stack, .week-col:focus-visible .week-stack { filter: brightness(1.06); box-shadow: 0 0 0 2px var(--sm-accent-soft); }
+.week-stack { width: min(46px, 70%); display: flex; flex-direction: column-reverse; gap: 2px; border-radius: 4px 4px 0 0; overflow: hidden; }
+.week-stack .seg { flex-basis: 0; min-height: 2px; }
+.week-label { position: absolute; top: 100%; left: 0; right: 0; text-align: center; padding-top: .4rem; font-size: .78rem; font-weight: 600; color: var(--sm-muted); line-height: 1.2; }
+.week-label small { display: block; font-family: var(--sm-mono); font-weight: 400; font-size: .7rem; }
+.week-label.today { color: var(--sm-text); }
+.num-table td.num, .num-table .num { font-family: var(--sm-mono); font-variant-numeric: tabular-nums; font-size: .82rem; }
+
+/* Interruption heatmap (weekday x hour), single-hue sequential ramp */
+.heatmap { display: grid; gap: 3px; overflow-x: auto; }
+.heat-row { display: grid; grid-template-columns: 38px repeat(auto-fit, minmax(22px, 1fr)); grid-auto-flow: column; grid-auto-columns: minmax(22px, 1fr); gap: 3px; align-items: center; }
+.heat-head span { font-family: var(--sm-mono); font-size: .66rem; color: var(--sm-muted); text-align: center; }
+.heat-day { font-size: .76rem; font-weight: 600; color: var(--sm-muted); }
+.heat-cell { display: block; height: 22px; border-radius: 4px; background: var(--sm-surface-2); border: 1px solid var(--sm-border); }
+.heat-cell[data-level="1"] { background: var(--wp-heat-1); border-color: transparent; }
+.heat-cell[data-level="2"] { background: var(--wp-heat-2); border-color: transparent; }
+.heat-cell[data-level="3"] { background: var(--wp-heat-3); border-color: transparent; }
+.heat-cell[data-level="4"] { background: var(--wp-heat-4); border-color: transparent; }
+.heat-cell[data-level="5"] { background: var(--wp-heat-5); border-color: transparent; }
+.heat-scale { display: flex; align-items: center; gap: 3px; justify-content: flex-end; font-size: .7rem; color: var(--sm-muted); margin-top: .4rem; }
+.heat-scale .heat-cell { width: 16px; height: 12px; }
+.heat-scale span:first-child { margin-right: .3rem; }
+.heat-scale span:last-child { margin-left: .3rem; }
+
+/* Chart tooltip */
+.chart-tip { position: fixed; z-index: 2000; pointer-events: none; min-width: 160px; max-width: 240px; padding: .5rem .7rem; border-radius: 10px; background: var(--sm-surface); color: var(--sm-text); border: 1px solid var(--sm-border); box-shadow: var(--sm-shadow-lg); font-size: .8rem; line-height: 1.45; }
+.chart-tip strong { display: block; margin-bottom: .15rem; }
+
+/* Trend deltas on stat tiles */
+.trend { font-family: var(--sm-mono); font-size: .78rem; font-weight: 600; }
+.trend.good { color: var(--sm-success); }
+.trend.bad { color: #d97706; }
+[data-bs-theme=dark] .trend.bad { color: #fbbf24; }
+
+.segmented-sm button { padding: .22rem .6rem; font-size: .78rem; }
+
+/* Small dropdown (CSV export) */
+.dropdown-wrap { position: relative; }
+.dropdown-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; min-width: 200px; padding: .35rem; border-radius: 12px; background: var(--sm-surface); border: 1px solid var(--sm-border); box-shadow: var(--sm-shadow-lg); }
+.dropdown-panel a { display: block; padding: .4rem .65rem; border-radius: 8px; color: var(--sm-text); text-decoration: none; font-size: .86rem; }
+.dropdown-panel a:hover { background: var(--sm-accent-soft); }
+.dropdown-label { padding: .45rem .65rem .2rem; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--sm-muted); }
+
+/* Six stat tiles in one row only where they fit; three per row below that. */
+@media (min-width: 1600px) { .tiles-6 > * { flex: 0 0 auto; width: 16.6667%; } }
+.stat-card .stat-label { padding-right: 46px; }

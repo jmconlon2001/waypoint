@@ -4,7 +4,8 @@ import { firstValueFrom, Observable } from 'rxjs';
 import {
   ConvertResponse, DailyTotals, Interruption, InterruptionDetails, Person, Project, QuickAddResponse,
   ResumeResponse, Review, Settings, TaskInput, TaskStatus, TimeEntry, TimeEntryInput, TimeEntryKind,
-  TimerState, WorkTask,
+  TimerState, WorkTask, SettingsInput, CalendarStatus, SyncResult, CalendarEvent, MeetingRule, WeeklySummary,
+  InterruptionStats, PlannedVsActual, ExportKind,
 } from './models';
 
 /** Typed client for the Waypoint API (all calls return promises). */
@@ -25,7 +26,7 @@ export class ApiService {
 
   // Settings
   getSettings() { return this.run(this.http.get<Settings>(`${this.base}/settings`)); }
-  saveSettings(s: Omit<Settings, 'projectColors'>) { return this.run(this.http.put<Settings>(`${this.base}/settings`, s)); }
+  saveSettings(s: SettingsInput) { return this.run(this.http.put<Settings>(`${this.base}/settings`, s)); }
 
   // Projects
   getProjects(includeInactive = false) {
@@ -86,6 +87,34 @@ export class ApiService {
   // Review / reports
   getReview(date: string | null) { return this.run(this.http.get<Review>(`${this.base}/review`, { params: this.params({ date }) })); }
   getDailyTotals(date: string | null) { return this.run(this.http.get<DailyTotals>(`${this.base}/reports/daily`, { params: this.params({ date }) })); }
+  getWeekly(date: string | null) { return this.run(this.http.get<WeeklySummary>(`${this.base}/reports/weekly`, { params: this.params({ date }) })); }
+  getInterruptionStats(from: string, to: string) {
+    return this.run(this.http.get<InterruptionStats>(`${this.base}/reports/interruptions`, { params: this.params({ from, to }) }));
+  }
+  getPlan(date: string | null) { return this.run(this.http.get<PlannedVsActual>(`${this.base}/reports/plan`, { params: this.params({ date }) })); }
+  /** A plain link (not XHR) so the browser downloads the file. */
+  exportUrl(kind: ExportKind, from: string, to: string): string {
+    return `${this.base}/export/${kind}.csv?${this.params({ from, to }).toString()}`;
+  }
+  rollOver(taskIds: number[], toDate: string | null) {
+    return this.run(this.http.post<{ moved: number; toDate: string | null }>(`${this.base}/tasks/roll-over`, { taskIds, toDate }));
+  }
+
+  // Calendar
+  getCalendarStatus() { return this.run(this.http.get<CalendarStatus>(`${this.base}/calendar/status`)); }
+  setCalendarSource(icsUrl: string | null, internalDomains: string | null) {
+    return this.run(this.http.put<CalendarStatus>(`${this.base}/calendar/source`, { icsUrl, internalDomains }));
+  }
+  syncCalendar() { return this.run(this.http.post<SyncResult>(`${this.base}/calendar/sync`, {})); }
+  getCalendarEvents(date: string) { return this.run(this.http.get<CalendarEvent[]>(`${this.base}/calendar/events`, { params: this.params({ date }) })); }
+  getMeetingRules() { return this.run(this.http.get<MeetingRule[]>(`${this.base}/calendar/rules`)); }
+  createMeetingRule(titlePattern: string, projectId: number) {
+    return this.run(this.http.post<MeetingRule[]>(`${this.base}/calendar/rules`, { titlePattern, projectId }));
+  }
+  updateMeetingRule(id: number, titlePattern: string, projectId: number) {
+    return this.run(this.http.put<MeetingRule[]>(`${this.base}/calendar/rules/${id}`, { titlePattern, projectId }));
+  }
+  deleteMeetingRule(id: number) { return this.run(this.http.delete<MeetingRule[]>(`${this.base}/calendar/rules/${id}`)); }
 }
 
 /** Pulls the ProblemDetails title out of an HttpErrorResponse (or any error). */

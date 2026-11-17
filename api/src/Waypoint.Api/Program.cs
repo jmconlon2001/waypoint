@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Waypoint.Api.Data;
 using Waypoint.Api.Endpoints;
+using Waypoint.Api.Integrations;
 using Waypoint.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -31,6 +32,16 @@ builder.Services.AddScoped<TimerService>();
 builder.Services.AddScoped<TimeEntryService>();
 builder.Services.AddScoped<InterruptionService>();
 builder.Services.AddScoped<ReviewService>();
+builder.Services.AddScoped<ReportService>();
+builder.Services.AddScoped<CalendarService>();
+
+// Read-only calendar feed: the only outbound call (NFR-1). Disabled until an iCal address is saved.
+builder.Services.AddHttpClient<ICalendarFeed, HttpCalendarFeed>(c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(30);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("Waypoint/2 (personal calendar import)");
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHostedService<CalendarSyncWorker>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();

@@ -55,3 +55,47 @@ Content-Type: application/json
 
 ### Daily totals
 GET {{base}}/reports/daily?date=2026-11-17
+
+### ---- Phase 2 ----
+
+### Weekly summary (week containing the date; this week when omitted)
+GET {{base}}/reports/weekly?date=2026-11-17
+
+### Interruption stats for a range
+GET {{base}}/reports/interruptions?from=2026-11-01&to=2026-11-30
+
+### Planned vs. actual for a day
+GET {{base}}/reports/plan?date=2026-11-17
+
+### CSV export (time-entries | interruptions | meetings | daily)
+GET {{base}}/export/daily.csv?from=2026-11-01&to=2026-11-30
+
+### Roll unfinished tasks over to a later day (toDate null = back to backlog)
+POST {{base}}/tasks/roll-over
+Content-Type: application/json
+
+{ "taskIds": [1, 2], "toDate": "2026-11-18" }
+
+### Calendar status
+GET {{base}}/calendar/status
+
+### Save the secret iCal address ("" disconnects; null keeps the saved one)
+PUT {{base}}/calendar/source
+Content-Type: application/json
+
+{ "icsUrl": "https://calendar.google.com/calendar/ical/you%40example.com/private-xxxx/basic.ics", "internalDomains": "cfs.com" }
+
+### Sync now
+POST {{base}}/calendar/sync
+
+### Meetings for a day
+GET {{base}}/calendar/events?date=2026-11-17
+
+### Meeting rules
+GET {{base}}/calendar/rules
+
+###
+POST {{base}}/calendar/rules
+Content-Type: application/json
+
+{ "titlePattern": "SOX", "projectId": 1 }

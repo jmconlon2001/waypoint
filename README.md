@@ -50,7 +50,36 @@ The target is under five minutes of data entry a day. All data stays on the mach
 
 - **Light and dark themes.** Follows the OS, or saves your choice. The look is borrowed from Keyport, recolored blue/green.
 
-Not built yet (hooks only): Google Calendar import, metrics beyond daily totals, LLM features. See [docs/architecture.md](docs/architecture.md).
+## What's in Phase 2
+
+- **Calendar import (read-only).**
+  - Paste your Google Calendar's *Secret address in iCal format* under **Projects & settings → Google Calendar**. It syncs every 15 minutes and on demand.
+  - No OAuth client is needed. The address must be an `https://calendar.google.com` URL, is stored only in the local database, and is never sent back to the browser.
+  - Meetings count as time with no data entry. Events that don't count:
+    - all-day events;
+    - events marked free or declined;
+    - events longer than the limit (120 minutes by default, configurable).
+  - **Focus Time** events count as *planned focus*, not meetings.
+  - Meeting types are assigned automatically: 1:1, team, external, recurring, ad hoc. **Meeting rules** map a title to a project (e.g. "SOX" → SOX/J-SOX).
+  - Where a timer ran during a meeting, the meeting wins in the totals and the review flags the overlap.
+- **Daily review additions:**
+  - meetings on the timeline;
+  - focus blocks and task switches;
+  - **planned vs. actual**;
+  - **roll-over** of unfinished Today tasks to the next work day (or back to the backlog).
+- **Insights page (weekly summary):**
+  - time by kind (focus, meetings, reactive, untracked, unlogged) per day, with a table view;
+  - time by project and meetings by type;
+  - interruptions by source and person, and a weekday × hour heatmap;
+  - longest focus block, planned vs. actual;
+  - the trend against your previous 4 weeks (weeks with data only).
+- **CSV export** of time entries, interruptions, meetings and daily totals, for this week or the last 30 days.
+- **Reactive timer** on the Today page, for email and ad hoc asks with no planned task.
+- **Daily review reminder** at a time you choose: a toast, and optionally a desktop notification, while Waypoint is open.
+
+Not built yet: LLM features and Google Tasks import (Phase 3). See [docs/architecture.md](docs/architecture.md).
+
+> **Policy (NFR-7):** the calendar feed is the only outbound call. It uses the secret iCal address rather than an OAuth client, but it still reads calendar data from Google, so confirm with InfoSec before turning it on.
 
 ## Prerequisites
 
@@ -142,7 +171,7 @@ The API's connection string is `ConnectionStrings:Waypoint` in `api/src/Waypoint
 ### Tests
 
 ```powershell
-dotnet test api/Waypoint.slnx           # xUnit: quick-add parser, gaps/totals, timer/interruption flows, migration snapshot check
+dotnet test api/Waypoint.slnx           # xUnit: parser, gaps/totals, timer/interruption flows, iCal import, metrics, roll-over, CSV, migration snapshot
 cd web; npx ng test --watch=false       # Vitest: time-zone helpers, timeline layout, shell
 ```
 
@@ -156,7 +185,7 @@ cd api/src/Waypoint.Api
 dotnet ef migrations add <Name> --output-dir Data/Migrations
 ```
 
-> **Note:** the initial migration (`Data/Migrations/20261117170000_InitialCreate*`) and the model snapshot were written by hand, because the EF tooling could not be run when Phase 1 was built.
+> **Note:** the initial migration (`Data/Migrations/20261117170000_InitialCreate*`) was written by hand, because the EF tooling could not be run when Phase 1 was built. The Phase 2 migration was generated with `dotnet ef` against that snapshot with no spurious changes, which confirms the snapshot.
 >
 > The test `MigrationTests.Model_has_no_pending_changes` checks the snapshot against the model.
 >

@@ -1,24 +1,26 @@
-import { Gap, Interruption, Review, TimeEntry } from '../core/models';
+import { CalendarEvent, Gap, Interruption, Review, TimeEntry } from '../core/models';
 import { formatClock } from '../core/time';
 
 export type TimelineItem =
   | { type: 'entry'; start: string; end: string | null; entry: TimeEntry }
   | { type: 'interruption'; start: string; end: string | null; interruption: Interruption }
-  | { type: 'gap'; start: string; end: string; gap: Gap };
+  | { type: 'gap'; start: string; end: string; gap: Gap }
+  | { type: 'meeting'; start: string; end: string; meeting: CalendarEvent };
 
-/** Entries, interruptions and gaps of a day in chronological order. */
+/** Meetings, entries, interruptions and gaps of a day in chronological order. All-day events are left out. */
 export function buildTimeline(r: Review): TimelineItem[] {
   const items: TimelineItem[] = [
+    ...(r.meetings ?? []).filter((m) => !m.isAllDay).map((m) => ({ type: 'meeting' as const, start: m.startedAt, end: m.endedAt, meeting: m })),
     ...r.entries.map((e) => ({ type: 'entry' as const, start: e.startedAt, end: e.endedAt, entry: e })),
     ...r.interruptions.map((i) => ({ type: 'interruption' as const, start: i.startedAt, end: i.endedAt, interruption: i })),
     ...r.gaps.map((g) => ({ type: 'gap' as const, start: g.start, end: g.end, gap: g })),
   ];
-  const order = { entry: 0, interruption: 1, gap: 2 };
+  const order = { meeting: 0, entry: 1, interruption: 2, gap: 3 };
   return items.sort((a, b) => a.start.localeCompare(b.start) || order[a.type] - order[b.type]);
 }
 
 export interface RibbonSegment {
-  kind: 'entry' | 'interruption' | 'gap' | 'now';
+  kind: 'entry' | 'interruption' | 'gap' | 'meeting' | 'focus' | 'now';
   left: number;
   width: number;
   color: string | null;
@@ -41,9 +43,14 @@ export function ribbonSegments(r: Review, nowMs: number, tz: string): Ribbon {
   const clamp = (t: number) => Math.min(dayEnd, Math.max(dayStart, t));
   const endOf = (iso: string | null) => clamp(iso ? Date.parse(iso) : Math.min(nowMs, dayEnd));
 
+  const shown = (r.meetings ?? []).filter((m) => m.countsAsMeeting || m.isPlannedFocus);
   let from = Date.parse(r.workStart);
   let to = Date.parse(r.workEnd);
-  for (const x of [...r.entries.map((e) => [e.startedAt, e.endedAt] as const), ...r.interruptions.map((i) => [i.startedAt, i.endedAt] as const)]) {
+  for (const x of [
+    ...r.entries.map((e) => [e.startedAt, e.endedAt] as const),
+    ...r.interruptions.map((i) => [i.startedAt, i.endedAt] as const),
+    ...shown.map((m) => [m.startedAt, m.endedAt] as const),
+  ]) {
     from = Math.min(from, clamp(Date.parse(x[0])));
     to = Math.max(to, endOf(x[1]));
   }
@@ -56,6 +63,13 @@ export function ribbonSegments(r: Review, nowMs: number, tz: string): Ribbon {
   const pct = (t: number) => ((t - from) / span) * 100;
 
   const segments: RibbonSegment[] = [];
+  for (const m of shown) {
+    const s = clamp(Date.parse(m.startedAt)), e = clamp(Date.parse(m.endedAt));
+    segments.push({
+      kind: m.isPlannedFocus ? 'focus' : 'meeting', left: pct(s), width: pct(e) - pct(s), color: m.projectColor,
+      title: `${m.isPlannedFocus ? 'Focus time' : 'Meeting'}: ${m.title} ${formatClock(m.startedAt, tz)}–${formatClock(m.endedAt, tz)}`,
+    });
+  }
   for (const g of r.gaps) {
     const s = Date.parse(g.start), e = Date.parse(g.end);
     segments.push({ kind: 'gap', left: pct(s), width: pct(e) - pct(s), color: null, title: `Unlogged ${formatClock(g.start, tz)}–${formatClock(g.end, tz)}` });

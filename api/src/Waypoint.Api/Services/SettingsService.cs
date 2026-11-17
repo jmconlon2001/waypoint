@@ -34,7 +34,13 @@ public sealed class SettingsService(WaypointDbContext db)
         if (!LocalTime.IsValidTimeZone(input.TimeZone))
             throw ApiException.BadRequest($"Unknown time zone '{input.TimeZone}'. Use an IANA name such as America/New_York.");
 
+        if (input.MeetingMaxMinutes is < 15 or > 24 * 60)
+            throw ApiException.BadRequest("The meeting length limit must be between 15 and 1440 minutes.");
+        TimeOnly? reminder = string.IsNullOrWhiteSpace(input.ReviewReminderTime) ? null : ParseTime(input.ReviewReminderTime, "Review reminder");
+
         var s = await GetAsync(ct);
+        if (input.MeetingMaxMinutes is int max) s.MeetingMaxMinutes = max;
+        s.ReviewReminderTime = reminder;
         s.WorkdayStart = start;
         s.WorkdayEnd = end;
         s.TimerWarningMinutes = input.TimerWarningMinutes;
@@ -46,7 +52,8 @@ public sealed class SettingsService(WaypointDbContext db)
     private static SettingsDto ToDto(Setting s) => new(
         s.WorkdayStart.ToString("HH:mm", CultureInfo.InvariantCulture),
         s.WorkdayEnd.ToString("HH:mm", CultureInfo.InvariantCulture),
-        s.TimerWarningMinutes, s.TimeZone, ProjectPalette.Colors);
+        s.TimerWarningMinutes, s.TimeZone, ProjectPalette.Colors, s.MeetingMaxMinutes,
+        s.ReviewReminderTime?.ToString("HH:mm", CultureInfo.InvariantCulture));
 
     private static TimeOnly ParseTime(string? value, string label) =>
         TimeOnly.TryParseExact(value?.Trim(), ["HH:mm", "H:mm", "HH:mm:ss"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var t)

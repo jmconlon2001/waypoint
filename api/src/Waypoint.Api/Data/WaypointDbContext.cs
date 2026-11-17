@@ -12,6 +12,9 @@ public class WaypointDbContext(DbContextOptions<WaypointDbContext> options) : Db
     public DbSet<Interruption> Interruptions => Set<Interruption>();
     public DbSet<Person> People => Set<Person>();
     public DbSet<Setting> Settings => Set<Setting>();
+    public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
+    public DbSet<MeetingRule> MeetingRules => Set<MeetingRule>();
+    public DbSet<TaskPlan> TaskPlans => Set<TaskPlan>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -65,6 +68,36 @@ public class WaypointDbContext(DbContextOptions<WaypointDbContext> options) : Db
             e.ToTable("settings");
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.TimeZone).HasMaxLength(64).IsRequired();
+            e.Property(x => x.MeetingMaxMinutes).HasDefaultValue(120);
+            e.Property(x => x.CalendarIcsUrl).HasMaxLength(2048);
+            e.Property(x => x.CalendarInternalDomains).HasMaxLength(500);
+            e.Property(x => x.CalendarLastSyncError).HasMaxLength(1000);
+        });
+
+        b.Entity<CalendarEvent>(e =>
+        {
+            e.ToTable("calendar_events");
+            e.Property(x => x.ExternalId).HasMaxLength(400).IsRequired();
+            e.Property(x => x.Title).HasMaxLength(500).IsRequired();
+            e.Property(x => x.MeetingType).HasConversion<string>().HasMaxLength(16);
+            e.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.ExternalId).IsUnique();
+            e.HasIndex(x => x.StartedAt);
+        });
+
+        b.Entity<MeetingRule>(e =>
+        {
+            e.ToTable("meeting_rules");
+            e.Property(x => x.TitlePattern).HasMaxLength(200).IsRequired();
+            e.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TaskPlan>(e =>
+        {
+            e.ToTable("task_plans");
+            e.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.TaskId, x.Date }).IsUnique();
+            e.HasIndex(x => x.Date);
         });
 
         // snake_case column, key, foreign key and index names (PostgreSQL convention).

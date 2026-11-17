@@ -1,7 +1,7 @@
 <div class="page-header">
   <div>
     <h1>Daily review</h1>
-    <p class="page-subtitle">{{ title() }} · fill the gaps in your work hours, then you're done.</p>
+    <p class="page-subtitle">{{ title() }} · fill the gaps, roll over what's left, then you're done.</p>
   </div>
   <div class="page-actions">
     <button type="button" class="icon-btn" (click)="shift(-1)" aria-label="Previous day"><span class="i i-chevron-left"></span></button>
@@ -23,27 +23,56 @@
 }
 
 @if (review(); as r) {
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-xl-3">
+  @if (r.overlaps.length) {
+    <div class="action-needed">
+      <span class="action-needed-icon"><span class="i i-calendar"></span></span>
+      <div class="flex-grow-1">
+        <strong>{{ r.overlaps.length === 1 ? 'A timer was' : r.overlaps.length + ' timers were' }} running during a meeting.</strong>
+        <div class="cell-sub">Meeting time wins in the totals. Trim the entry if the timer was left running by mistake.</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        @for (o of r.overlaps; track o.entryId) {
+          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="fixOverlap(o)" [title]="'Edit the entry for ' + o.title">
+            <span class="i i-edit"></span> {{ o.title }} · {{ o.meetingTitle }} <span class="num">{{ fmt(o.minutes) }}</span>
+          </button>
+        }
+      </div>
+    </div>
+  }
+
+  <div class="row g-3 mb-4 row-cols-2 row-cols-md-3 row-cols-xl-5">
+    <div class="col">
       <div class="card stat-card"><div class="card-body">
         <div class="stat-label">Focus</div><div class="stat-value">{{ fmt(r.totals.taskMinutes) }}</div>
-        <div class="stat-foot">Task work</div><span class="stat-icon"><span class="i i-target"></span></span>
+        <div class="stat-foot">
+          @if (r.totals.focusBlockCount) {
+            {{ r.totals.focusBlockCount }} focus block{{ r.totals.focusBlockCount === 1 ? '' : 's' }} · longest {{ fmt(r.totals.longestFocusBlockMinutes) }}
+          } @else { No 25-min focus block yet }
+        </div><span class="stat-icon"><span class="i i-target"></span></span>
       </div></div>
     </div>
-    <div class="col-6 col-xl-3">
+    <div class="col">
+      <div class="card stat-card"><div class="card-body">
+        <div class="stat-label">Meetings</div><div class="stat-value">{{ fmt(r.totals.meetingMinutes) }}</div>
+        <div class="stat-foot">
+          {{ r.totals.meetingCount }} meeting{{ r.totals.meetingCount === 1 ? '' : 's' }}@if (r.totals.plannedFocusMinutes) { · {{ fmt(r.totals.plannedFocusMinutes) }} focus time booked }
+        </div><span class="stat-icon tint-pink"><span class="i i-users"></span></span>
+      </div></div>
+    </div>
+    <div class="col">
       <div class="card stat-card"><div class="card-body">
         <div class="stat-label">Reactive</div><div class="stat-value">{{ fmt(r.totals.reactiveMinutes) }}</div>
         <div class="stat-foot">Incl. converted interruptions</div><span class="stat-icon tint-cyan"><span class="i i-inbox"></span></span>
       </div></div>
     </div>
-    <div class="col-6 col-xl-3">
+    <div class="col">
       <div class="card stat-card"><div class="card-body">
         <div class="stat-label">Interruptions</div>
         <div class="stat-value">{{ r.totals.interruptionCount }}<span class="fs-6 text-muted ms-2">{{ fmt(r.totals.interruptionMinutes) }}</span></div>
-        <div class="stat-foot">Logged with <kbd>i</kbd></div><span class="stat-icon tint-warning"><span class="i i-zap"></span></span>
+        <div class="stat-foot">{{ r.totals.taskSwitches }} task switch{{ r.totals.taskSwitches === 1 ? '' : 'es' }}</div><span class="stat-icon tint-warning"><span class="i i-zap"></span></span>
       </div></div>
     </div>
-    <div class="col-6 col-xl-3">
+    <div class="col">
       <div class="card stat-card"><div class="card-body">
         <div class="stat-label">Untracked</div>
         <div class="stat-value">{{ fmt(r.totals.untrackedMinutes + r.totals.unloggedMinutes) }}</div>
@@ -56,12 +85,18 @@
     <div class="card-header">
       <h2>Timeline</h2>
       <div class="legend">
+        <span><span class="swatch-sm" style="background: var(--wp-kind-meeting)"></span>Meeting</span>
         <span><span class="swatch-sm" style="background: var(--sm-gradient)"></span>Task (project color)</span>
         <span><span class="swatch-sm" style="background: var(--sm-warning)"></span>Interruption</span>
         <span><span class="swatch-sm" style="background: var(--sm-hatch); border: 1px dashed var(--sm-border)"></span>Unlogged gap</span>
       </div>
     </div>
     <div class="card-body">
+      @if (allDay().length) {
+        <div class="d-flex flex-wrap gap-2 mb-2">
+          @for (m of allDay(); track m.id) { <span class="pill pill-muted" title="All-day events don't count as meeting time"><span class="i i-calendar"></span> {{ m.title }}</span> }
+        </div>
+      }
       @if (ribbon(); as rb) {
         <div class="ribbon" role="img" aria-label="Day timeline">
           @for (s of rb.segments; track $index) {
@@ -83,6 +118,23 @@
           <ul class="tl">
             @for (it of items(); track it.type + it.start + $index) {
               @switch (it.type) {
+                @case ('meeting') {
+                  <li class="tl-item meeting" [class.excluded]="!it.meeting.countsAsMeeting && !it.meeting.isPlannedFocus" [class.focus-time]="it.meeting.isPlannedFocus" [style.--pc]="it.meeting.projectColor">
+                    <div class="tl-time"><strong>{{ clock(it.meeting.startedAt) }}</strong>{{ clock(it.meeting.endedAt) }}</div>
+                    <div class="min-w-0">
+                      <div class="tl-title"><span class="i" [class.i-users]="!it.meeting.isPlannedFocus" [class.i-target]="it.meeting.isPlannedFocus"></span> {{ it.meeting.title }}</div>
+                      <div class="tl-sub">
+                        <span class="pill pill-muted">{{ meetingTypeLabel[it.meeting.meetingType] }}</span>
+                        @if (it.meeting.projectName) { <span class="project-pill" [style.--pc]="it.meeting.projectColor"><span class="project-dot"></span>{{ it.meeting.projectName }}</span> }
+                        <span class="num">{{ fmt(it.meeting.minutes) }}</span>
+                        @if (it.meeting.attendeeCount) { <span>· {{ it.meeting.attendeeCount }} people</span> }
+                        @if (it.meeting.excludedReason && !it.meeting.isPlannedFocus) { <span class="pill pill-muted" title="Not counted as meeting time">Not counted: {{ it.meeting.excludedReason }}</span> }
+                        @if (it.meeting.isPlannedFocus) { <span class="pill pill-info">Planned focus</span> }
+                      </div>
+                    </div>
+                    <div class="tl-actions"><span class="cell-sub">From calendar</span></div>
+                  </li>
+                }
                 @case ('entry') {
                   <li class="tl-item" [class.untracked]="it.entry.kind === 'Untracked'" [style.--pc]="it.entry.projectColor">
                     <div class="tl-time"><strong>{{ clock(it.entry.startedAt) }}</strong>{{ clock(it.entry.endedAt) }}</div>
@@ -184,6 +236,75 @@
     </div>
 
     <div class="col-xl-4">
+      @if (isToday() && r.unfinished.length) {
+        <div class="card card-flush mb-4">
+          <div class="card-header"><h2>Still open today</h2><span class="cell-sub">{{ r.unfinished.length }} unfinished</span></div>
+          <div class="card-body">
+            <ul class="roll-list">
+              @for (t of r.unfinished; track t.id) {
+                <li>
+                  <label class="form-check m-0">
+                    <input type="checkbox" class="form-check-input" [checked]="!rollSkip().has(t.id)" (change)="toggleRoll(t.id)" />
+                    <span class="form-check-label">
+                      <span class="cell-main">{{ t.title }}</span>
+                      <span class="cell-sub d-block">
+                        @if (t.projectName) { <span class="project-dot" [style.--pc]="t.projectColor"></span> {{ t.projectName }} · }
+                        {{ t.status }}@if (t.trackedMinutes) { · <span class="num">{{ fmt(t.trackedMinutes) }}</span> so far }
+                      </span>
+                    </span>
+                  </label>
+                </li>
+              }
+            </ul>
+            <div class="d-flex gap-2 p-3 pt-2 flex-wrap">
+              <button type="button" class="btn btn-sm btn-primary" (click)="rollOver(false)" [disabled]="!rollIds().length || rolling()">
+                <span class="i i-arrow-right"></span> Roll over to {{ shortDate(nextWorkday()) }}
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" (click)="rollOver(true)" [disabled]="!rollIds().length || rolling()">Back to backlog</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <div class="card mb-4">
+        <div class="card-header"><h2>Planned vs. actual</h2>
+          @if (r.plan.plannedCount) { <span class="cell-sub">{{ r.plan.plannedDoneCount }}/{{ r.plan.plannedCount }} planned done</span> }
+        </div>
+        <div class="card-body">
+          <div class="stacked-bar mb-2" role="img" [attr.aria-label]="'Planned ' + fmt(r.plan.plannedMinutes) + ', unplanned ' + fmt(r.plan.unplannedTaskMinutes) + ', reactive ' + fmt(r.plan.reactiveMinutes) + ', meetings ' + fmt(r.plan.meetingMinutes)">
+            @if (r.plan.plannedMinutes) { <span class="seg" style="background: var(--wp-kind-focus)" [style.flex-grow]="r.plan.plannedMinutes" [title]="'Planned tasks ' + fmt(r.plan.plannedMinutes)"></span> }
+            @if (r.plan.unplannedTaskMinutes) { <span class="seg" style="background: var(--wp-unplanned)" [style.flex-grow]="r.plan.unplannedTaskMinutes" [title]="'Unplanned tasks ' + fmt(r.plan.unplannedTaskMinutes)"></span> }
+            @if (r.plan.meetingMinutes) { <span class="seg" style="background: var(--wp-kind-meeting)" [style.flex-grow]="r.plan.meetingMinutes" [title]="'Meetings ' + fmt(r.plan.meetingMinutes)"></span> }
+            @if (r.plan.reactiveMinutes) { <span class="seg" style="background: var(--wp-kind-reactive)" [style.flex-grow]="r.plan.reactiveMinutes" [title]="'Reactive ' + fmt(r.plan.reactiveMinutes)"></span> }
+          </div>
+          <div class="legend mb-3">
+            <span><span class="swatch-sm" style="background: var(--wp-kind-focus)"></span>Planned <span class="num">{{ fmt(r.plan.plannedMinutes) }}</span></span>
+            <span><span class="swatch-sm" style="background: var(--wp-unplanned)"></span>Unplanned <span class="num">{{ fmt(r.plan.unplannedTaskMinutes) }}</span></span>
+            <span><span class="swatch-sm" style="background: var(--wp-kind-meeting)"></span>Meetings <span class="num">{{ fmt(r.plan.meetingMinutes) }}</span></span>
+            <span><span class="swatch-sm" style="background: var(--wp-kind-reactive)"></span>Reactive <span class="num">{{ fmt(r.plan.reactiveMinutes) }}</span></span>
+          </div>
+          @for (p of r.plan.planned; track p.taskId) {
+            <div class="plan-row">
+              <span class="i" [class.i-check]="p.done" [class.text-success]="p.done" [class.i-target]="!p.done" [class.text-muted]="!p.done"></span>
+              <span class="name" [class.text-muted]="!p.minutes && !p.done">{{ p.title }}</span>
+              <span class="num">{{ p.minutes ? fmt(p.minutes) : '–' }}</span>
+            </div>
+          } @empty {
+            <p class="text-muted small mb-2">Nothing was on the Today list for this day.</p>
+          }
+          @if (r.plan.unplanned.length) {
+            <div class="nav-section-inline">Unplanned</div>
+            @for (u of r.plan.unplanned; track u.title) {
+              <div class="plan-row">
+                <span class="project-dot" [style.--pc]="u.projectColor"></span>
+                <span class="name">{{ u.title }}</span>
+                <span class="num">{{ fmt(u.minutes) }}</span>
+              </div>
+            }
+          }
+        </div>
+      </div>
+
       <div class="card mb-4">
         <div class="card-header"><h2>By kind</h2><span class="cell-sub num">{{ fmt(r.totals.trackedMinutes) }} logged</span></div>
         <div class="card-body">
@@ -193,9 +314,14 @@
             <div class="bar"><span [style.width.%]="(r.totals.taskMinutes / kindTotal()) * 100" style="--pc: var(--sm-accent)"></span></div>
           </div>
           <div class="totals-row">
-            <span class="name"><span class="project-dot" style="--pc: #0891b2"></span>Reactive</span>
+            <span class="name"><span class="project-dot" style="--pc: var(--wp-kind-meeting)"></span>Meetings</span>
+            <span class="val">{{ fmt(r.totals.meetingMinutes) }}</span>
+            <div class="bar"><span [style.width.%]="(r.totals.meetingMinutes / kindTotal()) * 100" style="--pc: var(--wp-kind-meeting)"></span></div>
+          </div>
+          <div class="totals-row">
+            <span class="name"><span class="project-dot" style="--pc: var(--wp-kind-reactive)"></span>Reactive</span>
             <span class="val">{{ fmt(r.totals.reactiveMinutes) }}</span>
-            <div class="bar"><span [style.width.%]="(r.totals.reactiveMinutes / kindTotal()) * 100" style="--pc: #0891b2"></span></div>
+            <div class="bar"><span [style.width.%]="(r.totals.reactiveMinutes / kindTotal()) * 100" style="--pc: var(--wp-kind-reactive)"></span></div>
           </div>
           <div class="totals-row">
             <span class="name"><span class="project-dot" style="--pc: var(--sm-muted)"></span>Untracked</span>

@@ -102,13 +102,32 @@ public sealed record ResumeResponse(InterruptionDto Interruption, TimeEntryDto? 
 public sealed record ConvertRequest(string? Title, int? ProjectId, WorkTaskStatus? Status);
 public sealed record ConvertResponse(InterruptionDto Interruption, TaskDto Task, TimeEntryDto Entry);
 
-/// <summary>Times are local wall-clock "HH:mm".</summary>
-public sealed record SettingsDto(string WorkdayStart, string WorkdayEnd, int TimerWarningMinutes, string TimeZone, IReadOnlyList<string> ProjectColors);
-public sealed record SettingsInput(string WorkdayStart, string WorkdayEnd, int TimerWarningMinutes, string TimeZone);
+/// <summary>Times are local wall-clock "HH:mm". ReviewReminderTime null = reminder off.</summary>
+public sealed record SettingsDto(
+    string WorkdayStart,
+    string WorkdayEnd,
+    int TimerWarningMinutes,
+    string TimeZone,
+    IReadOnlyList<string> ProjectColors,
+    int MeetingMaxMinutes,
+    string? ReviewReminderTime);
+
+/// <summary>MeetingMaxMinutes null keeps the current value. ReviewReminderTime null or "" turns the reminder off.</summary>
+public sealed record SettingsInput(
+    string WorkdayStart,
+    string WorkdayEnd,
+    int TimerWarningMinutes,
+    string TimeZone,
+    int? MeetingMaxMinutes = null,
+    string? ReviewReminderTime = null);
 
 public sealed record GapDto(DateTime Start, DateTime End, double Minutes);
 public sealed record ProjectTotalDto(int? ProjectId, string Name, string? Color, double Minutes);
 
+/// <summary>
+/// TaskMinutes is focus (task) work. Meeting time wins where a time entry overlaps a counted meeting, so
+/// task + reactive + untracked + meetings + unlogged adds up to the logged part of the day.
+/// </summary>
 public sealed record DailyTotalsDto(
     DateOnly Date,
     double TaskMinutes,
@@ -118,7 +137,14 @@ public sealed record DailyTotalsDto(
     int InterruptionCount,
     double InterruptionMinutes,
     double UnloggedMinutes,
-    IReadOnlyList<ProjectTotalDto> ByProject);
+    IReadOnlyList<ProjectTotalDto> ByProject,
+    double MeetingMinutes,
+    int MeetingCount,
+    double PlannedFocusMinutes,
+    int FocusBlockCount,
+    double FocusBlockMinutes,
+    double LongestFocusBlockMinutes,
+    int TaskSwitches);
 
 public sealed record ReviewDto(
     DateOnly Date,
@@ -130,7 +156,138 @@ public sealed record ReviewDto(
     IReadOnlyList<TimeEntryDto> Entries,
     IReadOnlyList<InterruptionDto> Interruptions,
     IReadOnlyList<GapDto> Gaps,
-    DailyTotalsDto Totals);
+    DailyTotalsDto Totals,
+    IReadOnlyList<CalendarEventDto> Meetings,
+    IReadOnlyList<OverlapDto> Overlaps,
+    IReadOnlyList<FocusBlockDto> FocusBlocks,
+    IReadOnlyList<TaskDto> Unfinished,
+    PlannedVsActualDto Plan);
 
 /// <summary>One-step gap fill: a project (as focus or reactive work) or "untracked".</summary>
 public sealed record GapFillRequest(DateTime Start, DateTime End, int? ProjectId, TimeEntryKind Kind, string? Note);
+
+// ---- Phase 2: calendar ----
+
+/// <summary>CountsAsMeeting / IsPlannedFocus apply the current threshold and type; Excluded explains why not.</summary>
+public sealed record CalendarEventDto(
+    int Id,
+    string Title,
+    DateTime StartedAt,
+    DateTime EndedAt,
+    bool IsAllDay,
+    int AttendeeCount,
+    bool IsRecurring,
+    bool IsFree,
+    MeetingType MeetingType,
+    int? ProjectId,
+    string? ProjectName,
+    string? ProjectColor,
+    bool CountsAsMeeting,
+    bool IsPlannedFocus,
+    string? ExcludedReason,
+    double Minutes);
+
+public sealed record CalendarStatusDto(
+    bool Configured,
+    string? AddressHint,
+    string? InternalDomains,
+    DateTime? LastSyncAt,
+    string? LastError,
+    int EventCount,
+    int SyncIntervalMinutes);
+
+/// <summary>IcsUrl null keeps the saved address; "" removes it (and turns import off).</summary>
+public sealed record CalendarSourceInput(string? IcsUrl, string? InternalDomains);
+
+public sealed record SyncResultDto(int Added, int Updated, int Removed, int Total, DateTime SyncedAt, CalendarStatusDto Status);
+
+public sealed record MeetingRuleDto(int Id, string TitlePattern, int ProjectId, string ProjectName, string ProjectColor, int MatchCount);
+public sealed record MeetingRuleInput(string TitlePattern, int ProjectId);
+
+public sealed record OverlapDto(int EntryId, string Title, int MeetingId, string MeetingTitle, double Minutes);
+public sealed record FocusBlockDto(DateTime Start, DateTime End, double Minutes, int TaskId, string? TaskTitle);
+
+// ---- Phase 2: planning and roll-over ----
+
+public sealed record PlannedTaskDto(int TaskId, string Title, string? ProjectName, string? ProjectColor, WorkTaskStatus Status, bool Done, double Minutes);
+public sealed record UnplannedTaskDto(int? TaskId, string Title, string? ProjectColor, double Minutes);
+
+/// <summary>Planned = tasks on the Today list for the day. Actual = time logged that day.</summary>
+public sealed record PlannedVsActualDto(
+    DateOnly Date,
+    IReadOnlyList<PlannedTaskDto> Planned,
+    int PlannedCount,
+    int PlannedDoneCount,
+    double PlannedMinutes,
+    double UnplannedTaskMinutes,
+    double ReactiveMinutes,
+    double MeetingMinutes,
+    IReadOnlyList<UnplannedTaskDto> Unplanned);
+
+/// <summary>ToDate null sends the tasks back to the backlog.</summary>
+public sealed record RollOverRequest(IReadOnlyList<int> TaskIds, DateOnly? ToDate);
+public sealed record RollOverResponse(int Moved, DateOnly? ToDate);
+
+// ---- Phase 2: reports ----
+
+public sealed record CountMinutesDto(string Key, string Label, int Count, double Minutes);
+
+public sealed record InterruptionStatsDto(
+    DateOnly From,
+    DateOnly To,
+    int Count,
+    double Minutes,
+    int CouldWaitCount,
+    int UrgentCount,
+    IReadOnlyList<CountMinutesDto> BySource,
+    IReadOnlyList<CountMinutesDto> ByPerson,
+    IReadOnlyList<int> ByHour,
+    // [weekday 0 = Monday .. 6 = Sunday][hour 0-23] counts, by local start time.
+    IReadOnlyList<IReadOnlyList<int>> Heatmap,
+    IReadOnlyList<CountMinutesDto> ByDay);
+
+public sealed record DayBreakdownDto(
+    DateOnly Date,
+    double FocusMinutes,
+    double ReactiveMinutes,
+    double UntrackedMinutes,
+    double MeetingMinutes,
+    double UnloggedMinutes,
+    double PlannedFocusMinutes,
+    int InterruptionCount,
+    double InterruptionMinutes,
+    int TaskSwitches,
+    int FocusBlockCount,
+    double LongestFocusBlockMinutes);
+
+public sealed record PeriodTotalsDto(
+    double FocusMinutes,
+    double ReactiveMinutes,
+    double UntrackedMinutes,
+    double MeetingMinutes,
+    double UnloggedMinutes,
+    double PlannedFocusMinutes,
+    int InterruptionCount,
+    double InterruptionMinutes,
+    int TaskSwitches,
+    int FocusBlockCount);
+
+public sealed record LongestBlockDto(DateOnly Date, DateTime Start, DateTime End, double Minutes, string? TaskTitle);
+
+public sealed record WeeklySummaryDto(
+    DateOnly WeekStart,
+    DateOnly WeekEnd,
+    string TimeZone,
+    IReadOnlyList<DayBreakdownDto> Days,
+    PeriodTotalsDto Totals,
+    // Average per week over the 4 weeks before this one.
+    PeriodTotalsDto TrendAverage,
+    int TrendWeeks,
+    IReadOnlyList<ProjectTotalDto> ByProject,
+    IReadOnlyList<CountMinutesDto> ByMeetingType,
+    LongestBlockDto? LongestFocusBlock,
+    InterruptionStatsDto Interruptions,
+    int PlannedCount,
+    int PlannedDoneCount,
+    double PlannedMinutes,
+    double UnplannedTaskMinutes);

@@ -75,16 +75,24 @@
 }
 
 <!-- Stat tiles -->
-<div class="row g-3 mb-4">
-  <div class="col-6 col-xl-3">
+<div class="row g-3 mb-4 row-cols-2 row-cols-md-3 row-cols-xl-5">
+  <div class="col">
     <div class="card stat-card"><div class="card-body">
       <div class="stat-label">Focus</div>
       <div class="stat-value">{{ fmt(totals()?.taskMinutes) }}</div>
-      <div class="stat-foot">Planned task work</div>
+      <div class="stat-foot">@if (totals()?.focusBlockCount) { {{ totals()?.focusBlockCount }} focus block{{ totals()?.focusBlockCount === 1 ? '' : 's' }} } @else { Task work }</div>
       <span class="stat-icon"><span class="i i-target"></span></span>
     </div></div>
   </div>
-  <div class="col-6 col-xl-3">
+  <div class="col">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Meetings</div>
+      <div class="stat-value">{{ fmt(totals()?.meetingMinutes) }}</div>
+      <div class="stat-foot">{{ totals()?.meetingCount ?? 0 }} so far, from your calendar</div>
+      <span class="stat-icon tint-pink"><span class="i i-users"></span></span>
+    </div></div>
+  </div>
+  <div class="col">
     <div class="card stat-card"><div class="card-body">
       <div class="stat-label">Reactive</div>
       <div class="stat-value">{{ fmt(totals()?.reactiveMinutes) }}</div>
@@ -92,7 +100,7 @@
       <span class="stat-icon tint-cyan"><span class="i i-inbox"></span></span>
     </div></div>
   </div>
-  <div class="col-6 col-xl-3">
+  <div class="col">
     <div class="card stat-card"><div class="card-body">
       <div class="stat-label">Interruptions</div>
       <div class="stat-value">{{ totals()?.interruptionCount ?? 0 }}<span class="fs-6 text-muted ms-2">{{ fmt(totals()?.interruptionMinutes) }}</span></div>
@@ -100,7 +108,7 @@
       <span class="stat-icon tint-warning"><span class="i i-zap"></span></span>
     </div></div>
   </div>
-  <div class="col-6 col-xl-3">
+  <div class="col">
     <a class="card stat-card text-reset d-block" routerLink="/review"><div class="card-body">
       <div class="stat-label">Unlogged</div>
       <div class="stat-value">{{ fmt(totals()?.unloggedMinutes) }}</div>
@@ -181,6 +189,22 @@
   </div>
 
   <div class="col-lg-4">
+    <form class="card mb-4" (ngSubmit)="startReactive()">
+      <div class="card-header"><h2>Reactive work</h2><span class="cell-sub">Email, ad hoc asks</span></div>
+      <div class="card-body">
+        <div class="d-flex gap-2 mb-2">
+          <select class="form-select" name="reactiveProject" [(ngModel)]="reactiveProject" aria-label="Project for reactive work">
+            <option [ngValue]="null" disabled>Project…</option>
+            @for (p of settings.projects(); track p.id) { <option [ngValue]="p.id">{{ p.name }}</option> }
+          </select>
+          <button type="submit" class="btn btn-outline-secondary text-nowrap" [disabled]="!reactiveProject || timer.busy()" title="Start a reactive timer (stops the current one)">
+            <span class="i i-play"></span> Start
+          </button>
+        </div>
+        <input class="form-control" name="reactiveNote" [(ngModel)]="reactiveNote" placeholder="What is it? (optional)" aria-label="Note" maxlength="300" />
+        <div class="form-text">Time with no planned task. It counts as reactive, not focus.</div>
+      </div>
+    </form>
     <div class="card mb-4">
       <div class="card-header"><h2>Time by project</h2><span class="cell-sub num">{{ fmt(totals()?.trackedMinutes) }}</span></div>
       <div class="card-body">

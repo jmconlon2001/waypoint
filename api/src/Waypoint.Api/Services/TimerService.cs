@@ -84,7 +84,7 @@ public sealed class TimerService(WaypointDbContext db, SettingsService settings,
                 task.Status = WorkTaskStatus.Doing;
                 task.CompletedAt = null;
             }
-            task.PlannedDate ??= LocalTime.LocalDate(now, await settings.TimeZoneAsync(ct));
+            // Starting a timer doesn't plan the task: that time shows up as unplanned in planned vs. actual.
         }
 
         await db.SaveChangesAsync(ct);

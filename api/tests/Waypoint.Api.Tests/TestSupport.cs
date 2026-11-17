@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Waypoint.Api.Data;
+using Waypoint.Api.Integrations;
 using Waypoint.Api.Services;
 
 namespace Waypoint.Api.Tests;
@@ -24,6 +25,9 @@ public sealed class TestApp : IDisposable
     public InterruptionService Interruptions { get; }
     public TimeEntryService Entries { get; }
     public ReviewService Review { get; }
+    public ReportService Reports { get; }
+    public CalendarService Calendar { get; }
+    public FakeCalendarFeed Feed { get; } = new();
 
     /// <param name="utcNow">Defaults to Tue 17 Nov 2026 10:00 in New York (15:00 UTC).</param>
     public TestApp(DateTime? utcNow = null)
@@ -40,10 +44,21 @@ public sealed class TestApp : IDisposable
         People = new PeopleService(Db);
         Interruptions = new InterruptionService(Db, Timer, People, Settings, Clock);
         Entries = new TimeEntryService(Db, Settings, Clock);
-        Review = new ReviewService(Db, Settings, Clock);
+        Reports = new ReportService(Db, Settings, Clock);
+        Review = new ReviewService(Reports, Tasks, Settings, Clock);
+        Calendar = new CalendarService(Db, Settings, Feed, Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<CalendarService>.Instance);
     }
 
     public int ProjectId(string name) => Db.Projects.Single(p => p.Name == name).Id;
 
     public void Dispose() => Db.Dispose();
+}
+
+/// <summary>Serves a fixed iCalendar document instead of calling Google.</summary>
+public sealed class FakeCalendarFeed : ICalendarFeed
+{
+    public string Ics { get; set; } = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n";
+    public Exception? Error { get; set; }
+    public Task<string> DownloadAsync(string url, CancellationToken ct = default) =>
+        Error is null ? Task.FromResult(Ics) : Task.FromException<string>(Error);
 }

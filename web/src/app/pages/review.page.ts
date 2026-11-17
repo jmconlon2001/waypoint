@@ -1,12 +1,12 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, errorMessage } from '../core/api.service';
-import { Gap, INTERRUPTION_SOURCES, Interruption, InterruptionSource, Review, TimeEntry, TimeEntryKind, sourceLabel } from '../core/models';
+import { Gap, INTERRUPTION_SOURCES, Interruption, InterruptionSource, MEETING_TYPE_LABELS, Overlap, Review, TimeEntry, TimeEntryKind, sourceLabel } from '../core/models';
 import { SettingsStore } from '../core/settings.store';
 import { TimerStore } from '../core/timer.store';
 import { ToastService } from '../core/toast.service';
 import { UiStore } from '../core/ui.store';
-import { addDays, formatClock, formatDateLong, formatMinutes, localTime, zonedToUtc } from '../core/time';
+import { addDays, formatClock, formatDateLong, formatDateShort, formatMinutes, localTime, zonedToUtc } from '../core/time';
 import { PersonInput } from '../shared/person-input';
 import { buildTimeline, ribbonSegments, TimelineItem } from './timeline';
 
@@ -28,6 +28,12 @@ export class ReviewPage {
   protected readonly fmt = formatMinutes;
   protected readonly sources = INTERRUPTION_SOURCES;
   protected readonly sourceLabel = sourceLabel;
+  protected readonly meetingTypeLabel = MEETING_TYPE_LABELS;
+  protected readonly shortDate = formatDateShort;
+
+  /** Unfinished tasks ticked for roll-over (all by default). */
+  protected readonly rollSkip = signal<Set<number>>(new Set());
+  protected readonly rolling = signal(false);
 
   // Interruption editor state
   protected edSource: InterruptionSource | null = null;
@@ -52,7 +58,21 @@ export class ReviewPage {
   protected readonly maxProject = computed(() => Math.max(1, ...(this.review()?.totals.byProject ?? []).map((p) => p.minutes)));
   protected readonly kindTotal = computed(() => {
     const t = this.review()?.totals;
-    return t ? Math.max(1, t.taskMinutes + t.reactiveMinutes + t.untrackedMinutes + t.unloggedMinutes) : 1;
+    return t ? Math.max(1, t.taskMinutes + t.meetingMinutes + t.reactiveMinutes + t.untrackedMinutes + t.unloggedMinutes) : 1;
+  });
+  protected readonly allDay = computed(() => (this.review()?.meetings ?? []).filter((m) => m.isAllDay));
+  protected readonly tomorrow = computed(() => (this.date() ? addDays(this.date(), 1) : ''));
+  /** Next weekday: Friday's roll-over lands on Monday. */
+  protected readonly nextWorkday = computed(() => {
+    let d = this.tomorrow();
+    if (!d) return d;
+    while ([0, 6].includes(new Date(d + 'T12:00:00Z').getUTCDay())) d = addDays(d, 1);
+    return d;
+  });
+  protected readonly rollIds = computed(() => (this.review()?.unfinished ?? []).map((t) => t.id).filter((id) => !this.rollSkip().has(id)));
+  protected readonly planTotal = computed(() => {
+    const p = this.review()?.plan;
+    return p ? Math.max(1, p.plannedMinutes + p.unplannedTaskMinutes + p.reactiveMinutes + p.meetingMinutes) : 1;
   });
 
   constructor() {
@@ -67,6 +87,7 @@ export class ReviewPage {
   }
 
   async load(): Promise<void> {
+    this.rollSkip.set(new Set());
     try {
       this.review.set(await this.api.getReview(this.date()));
     } catch (e) {
@@ -129,6 +150,38 @@ export class ReviewPage {
     } catch (err) {
       this.toast.error(errorMessage(err));
     }
+  }
+
+  toggleRoll(id: number): void {
+    const next = new Set(this.rollSkip());
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    this.rollSkip.set(next);
+  }
+
+  /** End-of-day roll-over: ticked tasks move to the next work day (or back to the backlog). */
+  async rollOver(toBacklog: boolean): Promise<void> {
+    const ids = this.rollIds();
+    if (!ids.length) return;
+    this.rolling.set(true);
+    try {
+      const r = await this.api.rollOver(ids, toBacklog ? null : this.nextWorkday());
+      this.toast.show(toBacklog
+        ? `${r.moved} task${r.moved === 1 ? '' : 's'} back to the backlog`
+        : `${r.moved} task${r.moved === 1 ? '' : 's'} moved to ${formatDateShort(this.nextWorkday())}`);
+      await this.timer.refresh();
+      this.timer.bump();
+    } catch (e) {
+      this.toast.error(errorMessage(e));
+    } finally {
+      this.rolling.set(false);
+    }
+  }
+
+  /** Opens the entry that ran during a meeting so its times can be trimmed. */
+  fixOverlap(o: Overlap): void {
+    const e = this.review()?.entries.find((x) => x.id === o.entryId);
+    if (e) this.editEntry(e);
   }
 
   openInterruption(i: Interruption): void {

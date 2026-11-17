@@ -158,6 +158,7 @@ public sealed class InterruptionService(
         };
         db.Tasks.Add(task);
         db.TimeEntries.Add(entry);
+        if (task.PlannedDate is DateOnly planned) await PlanLog.RecordAsync(db, task, planned, ct);
         i.ConvertedTask = task;
         await db.SaveChangesAsync(ct);
 

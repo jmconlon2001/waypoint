@@ -60,6 +60,25 @@ public static class Intervals
         return gaps;
     }
 
+    /// <summary>Minutes of <paramref name="interval"/> covered by <paramref name="mergedBusy"/> (sorted, non-overlapping).</summary>
+    public static double OverlapMinutes(Interval interval, IReadOnlyList<Interval> mergedBusy)
+    {
+        double total = 0;
+        foreach (var b in mergedBusy)
+        {
+            if (b.End <= interval.Start) continue;
+            if (b.Start >= interval.End) break;
+            var s = b.Start > interval.Start ? b.Start : interval.Start;
+            var e = b.End < interval.End ? b.End : interval.End;
+            if (e > s) total += (e - s).TotalMinutes;
+        }
+        return total;
+    }
+
+    /// <summary>The parts of <paramref name="interval"/> not covered by <paramref name="cut"/>.</summary>
+    public static List<Interval> Subtract(Interval interval, IEnumerable<Interval> cut) =>
+        Gaps(interval, cut, TimeSpan.Zero);
+
     private static void AddGap(List<Interval> gaps, Interval gap, TimeSpan minGap)
     {
         if (gap.Duration >= minGap && !gap.IsEmpty) gaps.Add(gap);

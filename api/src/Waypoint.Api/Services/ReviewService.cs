@@ -1,55 +1,60 @@
-using Microsoft.EntityFrameworkCore;
 using Waypoint.Api.Contracts;
-using Waypoint.Api.Data;
 using Waypoint.Api.Data.Entities;
 using Waypoint.Api.Domain;
 
 namespace Waypoint.Api.Services;
 
-/// <summary>The end-of-day timeline (entries, interruptions, unlogged gaps) and daily totals.</summary>
-public sealed class ReviewService(WaypointDbContext db, SettingsService settings, TimeProvider clock)
+/// <summary>
+/// The end-of-day review: timeline (entries, interruptions, meetings, unlogged gaps), daily totals, timers that
+/// overlapped meetings, focus blocks, planned vs. actual, and today's unfinished tasks to roll over.
+/// </summary>
+public sealed class ReviewService(ReportService reports, TaskService tasks, SettingsService settings, TimeProvider clock)
 {
     /// <summary>Gaps shorter than this are noise (the time between clicking stop and start).</summary>
     public static readonly TimeSpan MinGap = TimeSpan.FromMinutes(2);
 
     public async Task<ReviewDto> GetDayAsync(DateOnly? date, CancellationToken ct = default)
     {
-        var setting = await settings.GetAsync(ct);
-        var tz = LocalTime.FindTimeZone(setting.TimeZone);
         var now = Mapping.TruncateToSecond(clock.GetUtcNow().UtcDateTime);
-        var day = date ?? LocalTime.LocalDate(now, tz);
-        var bounds = LocalTime.DayBoundsUtc(day, tz);
-        var work = LocalTime.WorkHoursUtc(day, setting.WorkdayStart, setting.WorkdayEnd, tz);
+        var today = LocalTime.LocalDate(now, await settings.TimeZoneAsync(ct));
+        var day = date ?? today;
+        var data = await reports.LoadAsync(day, day, ct);
 
-        var entries = await db.TimeEntries.Include(e => e.Task).Include(e => e.Project)
-            .Where(e => e.StartedAt < bounds.End && (e.EndedAt == null || e.EndedAt > bounds.Start))
-            .OrderBy(e => e.StartedAt)
-            .ToListAsync(ct);
-        var interruptions = await db.Interruptions
-            .Include(i => i.Person)
-            .Include(i => i.PausedTimeEntry).ThenInclude(e => e!.Task)
-            .Where(i => i.StartedAt < bounds.End && (i.EndedAt == null || i.EndedAt > bounds.Start))
-            .OrderBy(i => i.StartedAt)
-            .ToListAsync(ct);
+        var bounds = LocalTime.DayBoundsUtc(day, data.Tz);
+        var work = LocalTime.WorkHoursUtc(day, data.Setting.WorkdayStart, data.Setting.WorkdayEnd, data.Tz);
+        var summary = ReportService.Summarize(day, data);
+        var max = data.Setting.MeetingMaxMinutes;
 
-        var summary = DailySummary.Build(
-            bounds, work, now,
-            entries.Select(e => new SummaryEntry(e.StartedAt, e.EndedAt, e.Kind, e.ProjectId, e.Project?.Name, e.Project?.Color)),
-            interruptions.Select(i => (i.StartedAt, i.EndedAt)),
-            MinGap);
+        var entries = data.Entries.Where(e => e.StartedAt < bounds.End && (e.EndedAt ?? now) > bounds.Start).ToList();
+        var interruptions = data.Interruptions.Where(i => i.StartedAt < bounds.End && (i.EndedAt ?? now) > bounds.Start).ToList();
+        var counted = data.Events.Where(e => Meetings.CountsAsMeeting(e, max)).ToList();
 
-        var totals = new DailyTotalsDto(
-            day,
-            summary.TaskMinutes, summary.ReactiveMinutes, summary.UntrackedMinutes, summary.TrackedMinutes,
-            summary.InterruptionCount, summary.InterruptionMinutes, summary.UnloggedMinutes,
-            summary.ByProject.Select(p => new ProjectTotalDto(p.ProjectId, p.Name, p.Color, p.Minutes)).ToList());
+        var overlaps = summary.Overlaps.Select(o =>
+        {
+            var entry = entries.First(e => e.Id == o.EntryId);
+            var meeting = counted.FirstOrDefault(m => m.StartedAt < (entry.EndedAt ?? now) && m.EndedAt > entry.StartedAt);
+            return new OverlapDto(o.EntryId, entry.Task?.Title ?? entry.Project?.Name ?? "Timer", meeting?.Id ?? 0, meeting?.Title ?? "a meeting", o.Minutes);
+        }).ToList();
+
+        var blocks = summary.FocusBlocks.Select(b => new FocusBlockDto(
+            b.Interval.Start, b.Interval.End, Math.Round(b.Interval.Minutes, 2), b.TaskId,
+            entries.FirstOrDefault(e => e.TaskId == b.TaskId)?.Task?.Title)).ToList();
+
+        var unfinished = day == today
+            ? (await tasks.TodayAsync(ct)).Where(t => t.Status != WorkTaskStatus.Done).ToList()
+            : [];
 
         return new ReviewDto(
-            day, tz.Id, bounds.Start, bounds.End, work.Start, work.End,
+            day, data.Tz.Id, bounds.Start, bounds.End, work.Start, work.End,
             entries.Select(e => e.ToDto(now)).ToList(),
             interruptions.Select(i => i.ToDto(now)).ToList(),
             summary.Gaps.Select(g => new GapDto(g.Start, g.End, Math.Round(g.Minutes, 2))).ToList(),
-            totals);
+            ReportService.ToTotalsDto(day, summary),
+            data.Events.Select(e => CalendarService.ToDto(e, max)).ToList(),
+            overlaps,
+            blocks,
+            unfinished,
+            await reports.BuildPlanAsync(day, data, ct));
     }
 
     public async Task<DailyTotalsDto> GetTotalsAsync(DateOnly? date, CancellationToken ct = default) =>

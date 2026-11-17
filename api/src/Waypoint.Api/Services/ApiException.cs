@@ -8,4 +8,6 @@ public sealed class ApiException(int statusCode, string message) : Exception(mes
     public static ApiException NotFound(string what) => new(StatusCodes.Status404NotFound, $"{what} was not found.");
     public static ApiException BadRequest(string message) => new(StatusCodes.Status400BadRequest, message);
     public static ApiException Conflict(string message) => new(StatusCodes.Status409Conflict, message);
+    /// <summary>An upstream service (Google Calendar) failed.</summary>
+    public static ApiException BadGateway(string message) => new(StatusCodes.Status502BadGateway, message);
 }

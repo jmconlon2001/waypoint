@@ -26,6 +26,8 @@ export class TodayPage {
   protected readonly loading = signal(true);
   protected readonly adding = signal(false);
   protected quickText = '';
+  protected reactiveProject: number | null = null;
+  protected reactiveNote = '';
 
   private readonly quickInput = viewChild<ElementRef<HTMLInputElement>>('quick');
 
@@ -89,6 +91,11 @@ export class TodayPage {
 
   isRunning(t: WorkTask): boolean {
     return this.timer.running()?.taskId === t.id;
+  }
+
+  async startReactive(): Promise<void> {
+    if (this.reactiveProject == null) return;
+    if (await this.timer.startReactive(this.reactiveProject, this.reactiveNote.trim() || null)) this.reactiveNote = '';
   }
 
   async startStop(t: WorkTask): Promise<void> {

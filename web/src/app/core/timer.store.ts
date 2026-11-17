@@ -67,6 +67,11 @@ export class TimerStore {
     return this.act(() => this.api.startTimer({ taskId }), 'Timer started');
   }
 
+  /** Reactive work with no planned task: email, ad hoc requests (FR-M6). */
+  startReactive(projectId: number, note: string | null = null): Promise<boolean> {
+    return this.act(() => this.api.startTimer({ projectId, kind: 'Reactive', note }), 'Reactive timer started');
+  }
+
   startProject(projectId: number): Promise<boolean> {
     return this.act(() => this.api.startTimer({ projectId, kind: 'Task' }), 'Timer started');
   }

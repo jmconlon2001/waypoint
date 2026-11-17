@@ -1,11 +1,12 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, errorMessage } from '../core/api.service';
-import { Person, Project } from '../core/models';
+import { CalendarStatus, MeetingRule, Person, Project } from '../core/models';
 import { SettingsStore } from '../core/settings.store';
 import { ThemeService } from '../core/theme.service';
 import { TimerStore } from '../core/timer.store';
 import { ToastService } from '../core/toast.service';
+import { formatClock } from '../core/time';
 
 interface ProjectDraft { id: number | null; name: string; color: string; active: boolean; }
 
@@ -16,7 +17,7 @@ interface ProjectDraft { id: number | null; name: string; color: string; active:
     <div class="page-header">
       <div>
         <h1>Projects &amp; settings</h1>
-        <p class="page-subtitle">Projects, work hours and the people who interrupt you.</p>
+        <p class="page-subtitle">Projects, work hours, your calendar and the people who interrupt you.</p>
       </div>
     </div>
 
@@ -73,7 +74,7 @@ interface ProjectDraft { id: number | null; name: string; color: string; active:
           </div>
         </div>
 
-        <div class="card card-flush">
+        <div class="card card-flush mb-4">
           <div class="card-header"><h2>People</h2><span class="cell-sub">Added automatically from interruptions</span></div>
           <div class="card-body">
             <table class="table">
@@ -103,6 +104,75 @@ interface ProjectDraft { id: number | null; name: string; color: string; active:
             </table>
           </div>
         </div>
+
+        <form class="card mb-4" (ngSubmit)="saveCalendar()">
+          <div class="card-header">
+            <h2>Google Calendar</h2>
+            @if (calendar()?.configured) {
+              @if (calendar()?.lastError) { <span class="pill pill-danger"><span class="i i-alert"></span> Sync failed</span> }
+              @else { <span class="pill pill-success">Connected</span> }
+            } @else { <span class="pill pill-muted">Off</span> }
+          </div>
+          <div class="card-body">
+            <p class="small text-muted">
+              Meetings are counted automatically from your calendar, read-only. In Google Calendar open
+              <strong>Settings → your calendar → Integrate calendar</strong> and copy the
+              <strong>Secret address in iCal format</strong>. It stays on this machine and is never shown again.
+            </p>
+            <label class="form-label" for="c-url">Secret iCal address</label>
+            <input id="c-url" name="url" type="password" class="form-control mono-input" [(ngModel)]="icsUrl" autocomplete="off"
+                   [placeholder]="calendar()?.addressHint ? 'Saved: ' + calendar()?.addressHint : 'https://calendar.google.com/calendar/ical/…/basic.ics'" />
+            <label class="form-label mt-3" for="c-dom">Internal email domains <span class="opt">optional</span></label>
+            <input id="c-dom" name="domains" class="form-control" [(ngModel)]="internalDomains" placeholder="cfs.com" />
+            <div class="form-text">Meetings with anyone outside these count as external. Empty: your calendar's own domain.</div>
+            @if (calendar(); as c) {
+              @if (c.configured) {
+                <div class="small mt-3">
+                  @if (c.lastSyncAt) { Last synced {{ syncedLabel(c.lastSyncAt) }} · {{ c.eventCount }} events · every {{ c.syncIntervalMinutes }} min }
+                  @else { Not synced yet. }
+                </div>
+                @if (c.lastError) { <div class="small text-danger mt-1"><span class="i i-alert"></span> {{ c.lastError }}</div> }
+              }
+            }
+          </div>
+          <div class="sm-modal-footer" style="border-radius: 0 0 var(--sm-radius) var(--sm-radius)">
+            @if (calendar()?.configured) {
+              <button type="button" class="btn btn-ghost text-danger me-auto" (click)="disconnectCalendar()">Disconnect</button>
+              <button type="button" class="btn btn-outline-secondary" (click)="syncNow()" [disabled]="syncing()">
+                <span class="i i-refresh"></span> {{ syncing() ? 'Syncing…' : 'Sync now' }}
+              </button>
+            }
+            <button type="submit" class="btn btn-primary" [disabled]="syncing()">Save</button>
+          </div>
+        </form>
+
+        <div class="card card-flush mb-4">
+          <div class="card-header"><h2>Meeting rules</h2><span class="cell-sub">Title contains → project</span></div>
+          <div class="card-body">
+            <form class="d-flex gap-2 p-3 border-bottom" (ngSubmit)="addRule()">
+              <input class="form-control" name="pattern" [(ngModel)]="rulePattern" placeholder="e.g. SOX" aria-label="Text in the meeting title" maxlength="200" />
+              <select class="form-select w-auto" name="ruleProject" [(ngModel)]="ruleProject" aria-label="Project">
+                <option [ngValue]="null" disabled>Project…</option>
+                @for (p of settings.projects(); track p.id) { <option [ngValue]="p.id">{{ p.name }}</option> }
+              </select>
+              <button type="submit" class="btn btn-primary" [disabled]="!rulePattern.trim() || ruleProject == null">Add</button>
+            </form>
+            <table class="table">
+              <tbody>
+                @for (r of rules(); track r.id) {
+                  <tr>
+                    <td><code>{{ r.titlePattern }}</code></td>
+                    <td><span class="project-pill" [style.--pc]="r.projectColor"><span class="project-dot"></span>{{ r.projectName }}</span></td>
+                    <td class="cell-sub num">{{ r.matchCount }} meeting{{ r.matchCount === 1 ? '' : 's' }}</td>
+                    <td class="td-actions"><button type="button" class="icon-btn icon-btn-sm danger" (click)="deleteRule(r)" title="Delete rule"><span class="i i-trash"></span></button></td>
+                  </tr>
+                } @empty {
+                  <tr><td><p class="text-muted m-0 small">No rules. Meetings without a project show as "Meetings (no project)". The first matching rule wins.</p></td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div class="col-xl-5">
@@ -123,6 +193,19 @@ interface ProjectDraft { id: number | null; name: string; color: string; active:
                 <label class="form-label" for="s-warn">Long-timer warning (minutes)</label>
                 <input id="s-warn" name="warn" type="number" min="0" max="1440" class="form-control mono-input" [(ngModel)]="timerWarningMinutes" />
                 <div class="form-text">0 turns it off. Default 180.</div>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label" for="s-meet">Longest meeting (minutes)</label>
+                <input id="s-meet" name="meet" type="number" min="15" max="1440" class="form-control mono-input" [(ngModel)]="meetingMaxMinutes" />
+                <div class="form-text">Longer events (holds, OOO, trainings) don't count as meeting time.</div>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label" for="s-remind">Daily review reminder</label>
+                <input id="s-remind" name="remind" type="time" class="form-control mono-input" [(ngModel)]="reviewReminderTime" />
+                <div class="form-text">Leave empty for no reminder. Shows while Waypoint is open.</div>
+                @if (reviewReminderTime && notificationState() === 'default') {
+                  <button type="button" class="btn btn-link btn-sm p-0" (click)="allowNotifications()">Also show a desktop notification</button>
+                }
               </div>
               <div class="col-sm-6">
                 <label class="form-label" for="s-tz">Time zone</label>
@@ -168,6 +251,16 @@ export class SettingsPage implements OnInit {
   protected workdayEnd = '17:30';
   protected timerWarningMinutes = 180;
   protected timeZone = 'America/New_York';
+  protected meetingMaxMinutes = 120;
+  protected reviewReminderTime = '';
+  protected readonly calendar = signal<CalendarStatus | null>(null);
+  protected readonly rules = signal<MeetingRule[]>([]);
+  protected readonly syncing = signal(false);
+  protected readonly notificationState = signal<string>('Notification' in window ? Notification.permission : 'unsupported');
+  protected icsUrl = '';
+  protected internalDomains = '';
+  protected rulePattern = '';
+  protected ruleProject: number | null = null;
   protected readonly zones = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone')
     ?? ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Asia/Tokyo', 'Europe/London', 'UTC'];
 
@@ -180,8 +273,14 @@ export class SettingsPage implements OnInit {
         this.workdayEnd = s.workdayEnd;
         this.timerWarningMinutes = s.timerWarningMinutes;
         this.timeZone = s.timeZone;
+        this.meetingMaxMinutes = s.meetingMaxMinutes;
+        this.reviewReminderTime = s.reviewReminderTime ?? '';
       }
       this.people.set(await this.api.searchPeople(''));
+      const [c, r] = await Promise.all([this.api.getCalendarStatus(), this.api.getMeetingRules()]);
+      this.calendar.set(c);
+      this.internalDomains = c.internalDomains ?? '';
+      this.rules.set(r);
     } catch (e) {
       this.toast.error(errorMessage(e));
     }
@@ -230,11 +329,81 @@ export class SettingsPage implements OnInit {
       const s = await this.api.saveSettings({
         workdayStart: this.workdayStart, workdayEnd: this.workdayEnd,
         timerWarningMinutes: Number(this.timerWarningMinutes) || 0, timeZone: this.timeZone.trim(),
+        meetingMaxMinutes: Number(this.meetingMaxMinutes) || 120, reviewReminderTime: this.reviewReminderTime || null,
       });
       this.settings.settings.set(s);
       await this.timer.refresh(true);
       this.timer.bump();
       this.toast.show('Settings saved');
+    } catch (e) {
+      this.toast.error(errorMessage(e));
+    }
+  }
+
+  async allowNotifications(): Promise<void> {
+    if (!('Notification' in window)) return;
+    this.notificationState.set(await Notification.requestPermission());
+  }
+
+  syncedLabel(iso: string): string {
+    const mins = Math.round((Date.now() - Date.parse(iso)) / 60000);
+    return mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : formatClock(iso, this.settings.tz());
+  }
+
+  /** Saves the address (if typed) and domains; a new address syncs straight away. */
+  async saveCalendar(): Promise<void> {
+    const url = this.icsUrl.trim();
+    try {
+      this.calendar.set(await this.api.setCalendarSource(url || null, this.internalDomains.trim() || null));
+      this.icsUrl = '';
+      if (url) await this.syncNow();
+      else this.toast.show('Calendar settings saved');
+    } catch (e) {
+      this.toast.error(errorMessage(e));
+    }
+  }
+
+  async syncNow(): Promise<void> {
+    this.syncing.set(true);
+    try {
+      const r = await this.api.syncCalendar();
+      this.calendar.set(r.status);
+      this.rules.set(await this.api.getMeetingRules());
+      this.timer.bump();
+      this.toast.show(`Calendar synced: ${r.total} events (${r.added} new, ${r.removed} removed)`);
+    } catch (e) {
+      this.toast.error(errorMessage(e));
+      this.calendar.set(await this.api.getCalendarStatus().catch(() => this.calendar()));
+    } finally {
+      this.syncing.set(false);
+    }
+  }
+
+  async disconnectCalendar(): Promise<void> {
+    if (!confirm('Disconnect the calendar? Meetings already imported are kept.')) return;
+    try {
+      this.calendar.set(await this.api.setCalendarSource('', this.internalDomains.trim() || null));
+      this.toast.show('Calendar disconnected');
+    } catch (e) {
+      this.toast.error(errorMessage(e));
+    }
+  }
+
+  async addRule(): Promise<void> {
+    if (this.ruleProject == null) return;
+    try {
+      this.rules.set(await this.api.createMeetingRule(this.rulePattern.trim(), this.ruleProject));
+      this.rulePattern = '';
+      this.timer.bump();
+    } catch (e) {
+      this.toast.error(errorMessage(e));
+    }
+  }
+
+  async deleteRule(r: MeetingRule): Promise<void> {
+    try {
+      this.rules.set(await this.api.deleteMeetingRule(r.id));
+      this.timer.bump();
     } catch (e) {
       this.toast.error(errorMessage(e));
     }

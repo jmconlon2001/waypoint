@@ -105,7 +105,32 @@ public static class ApiEndpoints
 
         // Daily review and reports
         api.MapGet("/review", (DateOnly? date, ReviewService s, CancellationToken ct) => s.GetDayAsync(date, ct));
-        api.MapGet("/reports/daily", (DateOnly? date, ReviewService s, CancellationToken ct) => s.GetTotalsAsync(date, ct));
+        var reports = api.MapGroup("/reports");
+        reports.MapGet("/daily", (DateOnly? date, ReportService s, CancellationToken ct) => s.GetDailyAsync(date, ct));
+        reports.MapGet("/weekly", (DateOnly? date, ReportService s, CancellationToken ct) => s.GetWeekAsync(date, ct));
+        reports.MapGet("/interruptions", (DateOnly? from, DateOnly? to, ReportService s, CancellationToken ct) => s.GetInterruptionStatsAsync(from, to, ct));
+        reports.MapGet("/plan", (DateOnly? date, ReportService s, CancellationToken ct) => s.GetPlanAsync(date, ct));
+
+        // CSV export: time-entries, interruptions, meetings, daily
+        api.MapGet("/export/{kind}.csv", async (string kind, DateOnly? from, DateOnly? to, ReportService s, CancellationToken ct) =>
+        {
+            var (content, fileName) = await s.ExportCsvAsync(kind, from, to, ct);
+            return Results.File(content, "text/csv; charset=utf-8", fileName);
+        });
+
+        // Roll-over of unfinished Today tasks (end-of-day review)
+        tasks.MapPost("/roll-over", (RollOverRequest input, TaskService s, CancellationToken ct) => s.RollOverAsync(input, ct));
+
+        // Calendar (read-only Google Calendar import)
+        var calendar = api.MapGroup("/calendar");
+        calendar.MapGet("/status", (CalendarService s, CancellationToken ct) => s.GetStatusAsync(ct));
+        calendar.MapPut("/source", (CalendarSourceInput input, CalendarService s, CancellationToken ct) => s.SetSourceAsync(input, ct));
+        calendar.MapPost("/sync", (CalendarService s, CancellationToken ct) => s.SyncAsync(ct));
+        calendar.MapGet("/events", (DateOnly? date, CalendarService s, CancellationToken ct) => s.ListAsync(date, ct));
+        calendar.MapGet("/rules", (CalendarService s, CancellationToken ct) => s.ListRulesAsync(ct));
+        calendar.MapPost("/rules", (MeetingRuleInput input, CalendarService s, CancellationToken ct) => s.CreateRuleAsync(input, ct));
+        calendar.MapPut("/rules/{id:int}", (int id, MeetingRuleInput input, CalendarService s, CancellationToken ct) => s.UpdateRuleAsync(id, input, ct));
+        calendar.MapDelete("/rules/{id:int}", (int id, CalendarService s, CancellationToken ct) => s.DeleteRuleAsync(id, ct));
 
         return app;
     }
