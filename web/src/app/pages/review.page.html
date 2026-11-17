@@ -1,0 +1,232 @@
+<div class="page-header">
+  <div>
+    <h1>Daily review</h1>
+    <p class="page-subtitle">{{ title() }} · fill the gaps in your work hours, then you're done.</p>
+  </div>
+  <div class="page-actions">
+    <button type="button" class="icon-btn" (click)="shift(-1)" aria-label="Previous day"><span class="i i-chevron-left"></span></button>
+    <input type="date" class="form-control w-auto" [ngModel]="date()" (ngModelChange)="$event && date.set($event)" aria-label="Date" />
+    <button type="button" class="icon-btn" (click)="shift(1)" [disabled]="isToday()" aria-label="Next day"><span class="i i-chevron-right"></span></button>
+    @if (!isToday()) { <button type="button" class="btn btn-outline-secondary" (click)="goToday()">Today</button> }
+    <button type="button" class="btn btn-primary" (click)="ui.entryEditor.set({ entry: null, date: date() })"><span class="i i-plus"></span> Log time</button>
+  </div>
+</div>
+
+@if (unclassified().length) {
+  <div class="action-needed">
+    <span class="action-needed-icon"><span class="i i-zap"></span></span>
+    <div class="flex-grow-1">
+      <strong>{{ unclassified().length }} interruption{{ unclassified().length === 1 ? '' : 's' }} without a source.</strong>
+      <div class="cell-sub">Open each one below and pick where it came from.</div>
+    </div>
+  </div>
+}
+
+@if (review(); as r) {
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+      <div class="card stat-card"><div class="card-body">
+        <div class="stat-label">Focus</div><div class="stat-value">{{ fmt(r.totals.taskMinutes) }}</div>
+        <div class="stat-foot">Task work</div><span class="stat-icon"><span class="i i-target"></span></span>
+      </div></div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="card stat-card"><div class="card-body">
+        <div class="stat-label">Reactive</div><div class="stat-value">{{ fmt(r.totals.reactiveMinutes) }}</div>
+        <div class="stat-foot">Incl. converted interruptions</div><span class="stat-icon tint-cyan"><span class="i i-inbox"></span></span>
+      </div></div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="card stat-card"><div class="card-body">
+        <div class="stat-label">Interruptions</div>
+        <div class="stat-value">{{ r.totals.interruptionCount }}<span class="fs-6 text-muted ms-2">{{ fmt(r.totals.interruptionMinutes) }}</span></div>
+        <div class="stat-foot">Logged with <kbd>i</kbd></div><span class="stat-icon tint-warning"><span class="i i-zap"></span></span>
+      </div></div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="card stat-card"><div class="card-body">
+        <div class="stat-label">Untracked</div>
+        <div class="stat-value">{{ fmt(r.totals.untrackedMinutes + r.totals.unloggedMinutes) }}</div>
+        <div class="stat-foot">{{ fmt(r.totals.unloggedMinutes) }} still unlogged</div><span class="stat-icon tint-muted"><span class="i i-hourglass"></span></span>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header">
+      <h2>Timeline</h2>
+      <div class="legend">
+        <span><span class="swatch-sm" style="background: var(--sm-gradient)"></span>Task (project color)</span>
+        <span><span class="swatch-sm" style="background: var(--sm-warning)"></span>Interruption</span>
+        <span><span class="swatch-sm" style="background: var(--sm-hatch); border: 1px dashed var(--sm-border)"></span>Unlogged gap</span>
+      </div>
+    </div>
+    <div class="card-body">
+      @if (ribbon(); as rb) {
+        <div class="ribbon" role="img" aria-label="Day timeline">
+          @for (s of rb.segments; track $index) {
+            <div class="ribbon-seg" [class]="s.kind + ' ' + (s.entryKind ?? '')" [style.left.%]="s.left" [style.width.%]="s.width" [style.--pc]="s.color" [title]="s.title"></div>
+          }
+        </div>
+        <div class="ribbon-scale">
+          @for (t of rb.ticks; track $index) { <span [style.left.%]="t.left">{{ t.label }}</span> }
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-xl-8">
+      <div class="card card-flush">
+        <div class="card-header"><h2>Entries &amp; gaps</h2><span class="cell-sub">Work hours {{ clock(r.workStart) }}–{{ clock(r.workEnd) }}</span></div>
+        <div class="card-body">
+          <ul class="tl">
+            @for (it of items(); track it.type + it.start + $index) {
+              @switch (it.type) {
+                @case ('entry') {
+                  <li class="tl-item" [class.untracked]="it.entry.kind === 'Untracked'" [style.--pc]="it.entry.projectColor">
+                    <div class="tl-time"><strong>{{ clock(it.entry.startedAt) }}</strong>{{ clock(it.entry.endedAt) }}</div>
+                    <div class="min-w-0">
+                      <div class="tl-title">{{ it.entry.taskTitle ?? it.entry.projectName ?? 'Untracked' }}</div>
+                      <div class="tl-sub">
+                        @if (it.entry.taskTitle && it.entry.projectName) { <span class="project-pill" [style.--pc]="it.entry.projectColor"><span class="project-dot"></span>{{ it.entry.projectName }}</span> }
+                        @if (it.entry.kind !== 'Task') { <span class="pill" [class.pill-info]="it.entry.kind === 'Reactive'" [class.pill-muted]="it.entry.kind === 'Untracked'">{{ it.entry.kind }}</span> }
+                        @if (!it.entry.endedAt) { <span class="pill pill-success"><span class="dot dot-success"></span> Running</span> }
+                        <span class="num">{{ fmt(it.entry.minutes) }}</span>
+                        @if (it.entry.note) { <span>· {{ it.entry.note }}</span> }
+                      </div>
+                    </div>
+                    <div class="tl-actions">
+                      <button type="button" class="icon-btn icon-btn-sm" (click)="editEntry(it.entry)" title="Edit"><span class="i i-edit"></span></button>
+                      <button type="button" class="icon-btn icon-btn-sm danger" (click)="deleteEntry(it.entry)" title="Delete"><span class="i i-trash"></span></button>
+                    </div>
+                  </li>
+                }
+                @case ('interruption') {
+                  <li class="tl-item interruption">
+                    <div class="tl-time"><strong>{{ clock(it.interruption.startedAt) }}</strong>{{ clock(it.interruption.endedAt) }}</div>
+                    <div class="min-w-0">
+                      <div class="tl-title"><span class="i i-zap text-warning"></span> {{ sourceLabel(it.interruption.sourceType) }}@if (it.interruption.personName) { · {{ it.interruption.personName }} }</div>
+                      <div class="tl-sub">
+                        <span class="num">{{ fmt(it.interruption.minutes) }}</span>
+                        @if (it.interruption.note) { <span>· {{ it.interruption.note }}</span> }
+                        @if (it.interruption.couldWait === true) { <span class="pill pill-muted">Could have waited</span> }
+                        @if (it.interruption.convertedTaskId) { <span class="pill pill-info">Converted to task</span> }
+                        @if (!it.interruption.sourceType) { <span class="pill pill-warning">Needs a source</span> }
+                      </div>
+                    </div>
+                    <div class="tl-actions">
+                      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="openInterruption(it.interruption)">
+                        {{ editing() === it.interruption.id ? 'Close' : (it.interruption.endedAt ? 'Edit' : 'Open') }}
+                      </button>
+                    </div>
+                  </li>
+                  @if (editing() === it.interruption.id) {
+                    <li class="tl-item interruption" style="display: block">
+                      <div class="type-picker mb-3">
+                        @for (s of sources; track s.value) {
+                          <button type="button" class="type-option" [class.selected]="edSource === s.value" (click)="edSource = s.value">
+                            <span class="type-icon"><span class="i" [class]="s.icon"></span></span> {{ s.label }}
+                          </button>
+                        }
+                      </div>
+                      <div class="row g-2 mb-2">
+                        <div class="col-sm-6"><app-person-input [(value)]="edPerson" /></div>
+                        <div class="col-6 col-sm-3"><input type="time" class="form-control mono-input" [(ngModel)]="edStart" aria-label="Start" /></div>
+                        <div class="col-6 col-sm-3"><input type="time" class="form-control mono-input" [(ngModel)]="edEnd" aria-label="End" /></div>
+                        <div class="col-12"><input class="form-control" [(ngModel)]="edNote" placeholder="Note (optional)" aria-label="Note" /></div>
+                      </div>
+                      <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <div class="segmented">
+                          <button type="button" [class.active]="edCouldWait === true" (click)="edCouldWait = edCouldWait === true ? null : true">Could wait</button>
+                          <button type="button" [class.active]="edCouldWait === false" (click)="edCouldWait = edCouldWait === false ? null : false">Urgent</button>
+                        </div>
+                        <span class="flex-grow-1"></span>
+                        <button type="button" class="btn btn-sm btn-ghost text-danger" (click)="deleteInterruption(it.interruption)"><span class="i i-trash"></span></button>
+                        @if (!it.interruption.convertedTaskId) {
+                          <select class="form-select form-select-sm w-auto" [(ngModel)]="edProject" aria-label="Project for the new task">
+                            <option [ngValue]="null">No project</option>
+                            @for (p of settings.projects(); track p.id) { <option [ngValue]="p.id">{{ p.name }}</option> }
+                          </select>
+                          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="convert(it.interruption)" title="Create a task with this interruption's time as reactive work">
+                            <span class="i i-check"></span> Convert to task
+                          </button>
+                        }
+                        <button type="button" class="btn btn-sm btn-primary" (click)="save(it.interruption)">Save</button>
+                      </div>
+                    </li>
+                  }
+                }
+                @case ('gap') {
+                  <li class="tl-item gap">
+                    <div class="tl-time"><strong>{{ clock(it.gap.start) }}</strong>{{ clock(it.gap.end) }}</div>
+                    <div class="min-w-0">
+                      <div class="tl-title">Unlogged · <span class="num">{{ fmt(it.gap.minutes) }}</span></div>
+                      <div class="tl-sub">Pick what it was and it's logged.</div>
+                    </div>
+                    <div class="gap-fill">
+                      <select #pick class="form-select form-select-sm" (change)="fill(it.gap, pick.value); pick.value = ''" aria-label="Fill gap with">
+                        <option value="">Fill with…</option>
+                        @for (p of settings.projects(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
+                        <option value="untracked">Untracked (breaks, misc.)</option>
+                      </select>
+                      <button type="button" class="icon-btn icon-btn-sm" (click)="detailGap(it.gap)" title="Log with details (task, note, reactive)"><span class="i i-edit"></span></button>
+                    </div>
+                  </li>
+                }
+              }
+            } @empty {
+              <li class="empty"><span class="i i-timeline"></span><h3>Nothing yet</h3><p class="mb-0">No entries or gaps for this day.</p></li>
+            }
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="card mb-4">
+        <div class="card-header"><h2>By kind</h2><span class="cell-sub num">{{ fmt(r.totals.trackedMinutes) }} logged</span></div>
+        <div class="card-body">
+          <div class="totals-row">
+            <span class="name"><span class="project-dot" style="--pc: var(--sm-accent)"></span>Focus / task</span>
+            <span class="val">{{ fmt(r.totals.taskMinutes) }}</span>
+            <div class="bar"><span [style.width.%]="(r.totals.taskMinutes / kindTotal()) * 100" style="--pc: var(--sm-accent)"></span></div>
+          </div>
+          <div class="totals-row">
+            <span class="name"><span class="project-dot" style="--pc: #0891b2"></span>Reactive</span>
+            <span class="val">{{ fmt(r.totals.reactiveMinutes) }}</span>
+            <div class="bar"><span [style.width.%]="(r.totals.reactiveMinutes / kindTotal()) * 100" style="--pc: #0891b2"></span></div>
+          </div>
+          <div class="totals-row">
+            <span class="name"><span class="project-dot" style="--pc: var(--sm-muted)"></span>Untracked</span>
+            <span class="val">{{ fmt(r.totals.untrackedMinutes) }}</span>
+            <div class="bar"><span [style.width.%]="(r.totals.untrackedMinutes / kindTotal()) * 100" style="--pc: var(--sm-muted)"></span></div>
+          </div>
+          <div class="totals-row">
+            <span class="name"><span class="project-dot" style="--pc: var(--sm-border)"></span>Unlogged gaps</span>
+            <span class="val">{{ fmt(r.totals.unloggedMinutes) }}</span>
+            <div class="bar"><span [style.width.%]="(r.totals.unloggedMinutes / kindTotal()) * 100" style="background: var(--sm-hatch)"></span></div>
+          </div>
+          <div class="totals-row mb-0">
+            <span class="name"><span class="project-dot" style="--pc: var(--sm-warning)"></span>Interruptions ({{ r.totals.interruptionCount }})</span>
+            <span class="val">{{ fmt(r.totals.interruptionMinutes) }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>By project</h2></div>
+        <div class="card-body">
+          @for (p of r.totals.byProject; track p.name) {
+            <div class="totals-row">
+              <span class="name"><span class="project-dot" [style.--pc]="p.color"></span>{{ p.name }}</span>
+              <span class="val">{{ fmt(p.minutes) }}</span>
+              <div class="bar"><span [style.width.%]="(p.minutes / maxProject()) * 100" [style.--pc]="p.color"></span></div>
+            </div>
+          } @empty {
+            <p class="text-muted mb-0">No project time this day.</p>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+}
