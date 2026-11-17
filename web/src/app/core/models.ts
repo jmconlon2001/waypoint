@@ -138,12 +138,181 @@ export interface ConvertResponse {
   entry: TimeEntry;
 }
 
+export type CalendarSource = 'None' | 'Google' | 'ICal';
+export type MeetingType = 'OneOnOne' | 'Team' | 'External' | 'Recurring' | 'AdHoc' | 'Focus';
+
+export const MEETING_TYPE_LABELS: Record<MeetingType, string> = {
+  OneOnOne: '1:1', Team: 'Team', External: 'External', Recurring: 'Recurring', AdHoc: 'Ad hoc', Focus: 'Focus time',
+};
+
 export interface Settings {
   workdayStart: string;
   workdayEnd: string;
   timerWarningMinutes: number;
   timeZone: string;
   projectColors: string[];
+  calendarSource: CalendarSource;
+  maxMeetingMinutes: number;
+  internalDomains: string;
+  reviewReminderEnabled: boolean;
+  reviewReminderTime: string;
+}
+
+export type SettingsInput = Omit<Settings, 'projectColors'>;
+
+export interface CalendarEvent {
+  id: number;
+  source: string;
+  title: string;
+  startedAt: string;
+  endedAt: string;
+  allDay: boolean;
+  attendeeCount: number;
+  recurring: boolean;
+  eventType: string;
+  meetingType: MeetingType;
+  projectId: number | null;
+  projectName: string | null;
+  projectColor: string | null;
+  counted: boolean;
+  exclusionReason: string | null;
+  plannedFocus: boolean;
+  minutes: number;
+}
+
+export interface MeetingOverlap {
+  timeEntryId: number;
+  calendarEventId: number;
+  eventTitle: string;
+  start: string;
+  end: string;
+  minutes: number;
+}
+
+export interface FocusBlock {
+  taskId: number;
+  taskTitle: string | null;
+  start: string;
+  end: string;
+  minutes: number;
+}
+
+export interface CalendarStatus {
+  source: CalendarSource;
+  googleConfigured: boolean;
+  googleConnected: boolean;
+  googleAccount: string | null;
+  iCalConfigured: boolean;
+  lastSyncAt: string | null;
+  lastSyncError: string | null;
+  eventCount: number;
+  syncIntervalMinutes: number;
+}
+
+export interface SyncResult {
+  source: CalendarSource;
+  added: number;
+  updated: number;
+  removed: number;
+  total: number;
+  syncedAt: string;
+}
+
+export interface MeetingRule {
+  id: number;
+  pattern: string;
+  projectId: number;
+  projectName: string | null;
+  projectColor: string | null;
+  sortOrder: number;
+  active: boolean;
+}
+
+export interface RolloverResult {
+  toDate: string;
+  rolled: number;
+  unplanned: number;
+}
+
+export interface DailyAggregate {
+  date: string;
+  taskMinutes: number;
+  reactiveMinutes: number;
+  untrackedMinutes: number;
+  meetingMinutes: number;
+  plannedFocusMinutes: number;
+  unloggedMinutes: number;
+  interruptionCount: number;
+  interruptionMinutes: number;
+  couldWaitCount: number;
+  taskSwitches: number;
+  focusBlocks: number;
+  longestFocusBlockMinutes: number;
+  plannedTasks: number;
+  plannedTasksWorked: number;
+  plannedTaskMinutes: number;
+  unplannedTaskMinutes: number;
+  meetingCount: number;
+  computedAt: string;
+}
+
+export interface NamedCount {
+  key: string;
+  label: string;
+  count: number;
+  minutes: number;
+  couldWaitCount: number;
+}
+
+export interface InterruptionStats {
+  from: string;
+  to: string;
+  count: number;
+  minutes: number;
+  couldWaitCount: number;
+  bySource: NamedCount[];
+  byPerson: NamedCount[];
+  heatmap: number[][];
+  byDay: NamedCount[];
+}
+
+export interface WeekTrend {
+  weekStart: string;
+  meetings: number;
+  focus: number;
+  reactive: number;
+  untracked: number;
+  unlogged: number;
+  interruptions: number;
+  focusBlocks: number;
+  taskSwitches: number;
+}
+
+export interface PlannedTask {
+  taskId: number;
+  title: string;
+  projectName: string | null;
+  projectColor: string | null;
+  status: TaskStatus;
+  plannedDates: string[];
+  minutesOnPlannedDays: number;
+  minutesInRange: number;
+}
+
+export interface WeeklyReport {
+  weekStart: string;
+  weekEnd: string;
+  days: DailyAggregate[];
+  byProject: ProjectTotal[];
+  kinds: { meetings: number; focus: number; reactive: number; untracked: number; unlogged: number; plannedFocus: number };
+  interruptions: InterruptionStats;
+  longestFocusBlock: FocusBlock | null;
+  focusBlocks: number;
+  taskSwitches: number;
+  trend: WeekTrend[];
+  plannedVsActual: PlannedTask[];
+  plannedTaskMinutes: number;
+  unplannedTaskMinutes: number;
 }
 
 export interface Gap {
@@ -169,6 +338,13 @@ export interface DailyTotals {
   interruptionMinutes: number;
   unloggedMinutes: number;
   byProject: ProjectTotal[];
+  meetingMinutes: number;
+  meetingCount: number;
+  plannedFocusMinutes: number;
+  couldWaitCount: number;
+  taskSwitches: number;
+  focusBlocks: number;
+  longestFocusBlockMinutes: number;
 }
 
 export interface Review {
@@ -182,4 +358,7 @@ export interface Review {
   interruptions: Interruption[];
   gaps: Gap[];
   totals: DailyTotals;
+  calendarEvents: CalendarEvent[];
+  overlaps: MeetingOverlap[];
+  focusBlocks: FocusBlock[];
 }

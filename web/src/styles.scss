@@ -237,7 +237,7 @@ button.topbar-chip { cursor: pointer; }
 
 .stat-card { position: relative; overflow: hidden; height: 100%; }
 .stat-card:hover { transform: translateY(-2px); box-shadow: var(--sm-shadow-lg); }
-.stat-card .stat-label { color: var(--sm-muted); font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.stat-card .stat-label { color: var(--sm-muted); font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; padding-right: 48px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat-card .stat-value { font-family: var(--sm-mono); font-variant-numeric: tabular-nums; font-size: 1.75rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; margin-top: .35rem; }
 .stat-card .stat-foot { color: var(--sm-muted); font-size: .82rem; margin-top: .35rem; }
 .stat-icon { position: absolute; right: 1.1rem; top: 1.1rem; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--sm-accent-soft); color: var(--sm-accent); }
@@ -540,3 +540,39 @@ button.topbar-chip { cursor: pointer; }
     .timer-hero .timer-big { font-size: 1.9rem; margin-left: 0; }
 }
 .ribbon-scale span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+
+/* ==========================================================================
+   Phase 2: calendar, weekly page, heatmap
+   ========================================================================== */
+.chart-box { position: relative; width: 100%; }
+
+/* Calendar items on the review ribbon / list */
+.ribbon-seg.meeting { top: 0; height: 45%; background: color-mix(in srgb, var(--pc, #0891b2) 75%, transparent); border-radius: 3px; outline: 1px solid color-mix(in srgb, var(--sm-surface) 60%, transparent); }
+.ribbon-seg.context { top: 0; height: 45%; background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--sm-muted) 28%, transparent) 0 4px, transparent 4px 7px); border-radius: 3px; }
+.ribbon-seg.focus-plan { top: 0; height: 45%; background: transparent; border: 1px dashed var(--sm-accent); border-radius: 3px; }
+.ribbon.has-calendar .ribbon-seg.entry, .ribbon.has-calendar .ribbon-seg.gap { top: 45%; }
+.tl-item.meeting { border-left-color: var(--pc, #0891b2); background: color-mix(in srgb, var(--pc, #0891b2) 6%, transparent); }
+.tl-item.context { border-left: 3px dotted color-mix(in srgb, var(--sm-muted) 70%, transparent); opacity: .72; }
+.tl-item.context .tl-title { color: var(--sm-muted); font-weight: 500; }
+.overlap-flag { color: #b45309; }
+[data-bs-theme=dark] .overlap-flag { color: #fbbf24; }
+.allday-strip { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .75rem; }
+.meeting-type { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+
+/* Heatmap (weekday × hour) */
+.heatmap { display: grid; grid-template-columns: 44px repeat(var(--cols), minmax(18px, 1fr)); gap: 3px; font-size: .7rem; }
+.heatmap .hm-label { color: var(--sm-muted); font-family: var(--sm-mono); display: flex; align-items: center; }
+.heatmap .hm-hour { color: var(--sm-muted); font-family: var(--sm-mono); text-align: center; }
+.heatmap .hm-cell { aspect-ratio: 1.6; border-radius: 4px; background: color-mix(in srgb, var(--sm-warning) calc(var(--v) * 100%), var(--sm-surface-2)); border: 1px solid var(--sm-border); }
+.heatmap .hm-cell.zero { background: var(--sm-surface-2); }
+
+.rank-list { list-style: none; margin: 0; padding: 0; }
+.rank-list li { display: grid; grid-template-columns: 1fr auto auto; gap: .75rem; align-items: center; padding: .45rem 0; border-bottom: 1px dashed var(--sm-border); font-size: .88rem; }
+.rank-list li:last-child { border-bottom: 0; }
+.rank-list .count { font-family: var(--sm-mono); font-weight: 700; }
+.rank-list .sub { font-family: var(--sm-mono); color: var(--sm-muted); font-size: .78rem; }
+
+.rollover-list { list-style: none; margin: 0; padding: 0; }
+.rollover-list li { display: flex; align-items: center; gap: .65rem; padding: .5rem 0; border-bottom: 1px dashed var(--sm-border); }
+.rollover-list li:last-child { border-bottom: 0; }
+.rollover-list li.skip .task-title { text-decoration: line-through; color: var(--sm-muted); }

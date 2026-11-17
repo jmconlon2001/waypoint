@@ -84,7 +84,6 @@ public sealed class TimerService(WaypointDbContext db, SettingsService settings,
                 task.Status = WorkTaskStatus.Doing;
                 task.CompletedAt = null;
             }
-            task.PlannedDate ??= LocalTime.LocalDate(now, await settings.TimeZoneAsync(ct));
         }
 
         await db.SaveChangesAsync(ct);

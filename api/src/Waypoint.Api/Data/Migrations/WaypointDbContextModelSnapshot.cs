@@ -22,6 +22,183 @@ namespace Waypoint.Api.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Waypoint.Api.Data.Entities.CalendarEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AllDay")
+                        .HasColumnType("boolean")
+                        .HasColumnName("all_day");
+
+                    b.Property<int>("AttendeeCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("attendee_count");
+
+                    b.Property<string>("AttendeeDomains")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("attendee_domains");
+
+                    b.Property<bool>("Declined")
+                        .HasColumnType("boolean")
+                        .HasColumnName("declined");
+
+                    b.Property<DateTime>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("external_id");
+
+                    b.Property<string>("MeetingType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("meeting_type");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("integer")
+                        .HasColumnName("project_id");
+
+                    b.Property<bool>("Recurring")
+                        .HasColumnType("boolean")
+                        .HasColumnName("recurring");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("source");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<DateTime>("SyncedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("synced_at");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("title");
+
+                    b.HasKey("Id")
+                        .HasName("pk_calendar_events");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_calendar_events_project_id");
+
+                    b.HasIndex("StartedAt")
+                        .HasDatabaseName("ix_calendar_events_started_at");
+
+                    b.HasIndex("Source", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_calendar_events_source_external_id");
+
+                    b.ToTable("calendar_events", (string)null);
+                });
+
+            modelBuilder.Entity("Waypoint.Api.Data.Entities.DailyAggregate", b =>
+                {
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<DateTime>("ComputedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("computed_at");
+
+                    b.Property<int>("CouldWaitCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("could_wait_count");
+
+                    b.Property<int>("FocusBlocks")
+                        .HasColumnType("integer")
+                        .HasColumnName("focus_blocks");
+
+                    b.Property<int>("InterruptionCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("interruption_count");
+
+                    b.Property<double>("InterruptionMinutes")
+                        .HasColumnType("double precision")
+                        .HasColumnName("interruption_minutes");
+
+                    b.Property<double>("LongestFocusBlockMinutes")
+                        .HasColumnType("double precision")
+                        .HasColumnName("longest_focus_block_minutes");
+
+                    b.Property<int>("MeetingCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("meeting_count");
+
+                    b.Property<double>("MeetingMinutes")
+                        .HasColumnType("double precision")
+                        .HasColumnName("meeting_minutes");
+
+                    b.Property<double>("PlannedFocusMinutes")
+                        .HasColumnType("double precision")
+                        .HasColumnName("planned_focus_minutes");
+
+                    b.Property<double>("PlannedTaskMinutes")
+                        .HasColumnType("double precision")
+                        .HasColumnName("planned_task_minutes");
+
+                    b.Property<int>("PlannedTasks")
+                        .HasColumnType("integer")
+                        .HasColumnName("planned_tasks");
+
+                    b.Property<int>("PlannedTasksWorked")
+                        .HasColumnType("integer")
+                        .HasColumnName("planned_tasks_worked");
+
+                    b.Property<double>("ReactiveMinutes")
+                        .HasColumnType("double precision")
+                        .HasColumnName("reactive_minutes");
+
+                    b.Property<int>("TaskSwitches")
+                        .HasColumnType("integer")
+                        .HasColumnName("task_switches");
+
+                    b.Property<double>("TaskMinutes")
+                        .HasColumnType("double precision")
+                        .HasColumnName("task_minutes");
+
+                    b.Property<double>("UnloggedMinutes")
+                        .HasColumnType("double precision")
+                        .HasColumnName("unlogged_minutes");
+
+                    b.Property<double>("UnplannedTaskMinutes")
+                        .HasColumnType("double precision")
+                        .HasColumnName("unplanned_task_minutes");
+
+                    b.Property<double>("UntrackedMinutes")
+                        .HasColumnType("double precision")
+                        .HasColumnName("untracked_minutes");
+
+                    b.HasKey("Date")
+                        .HasName("pk_daily_aggregates");
+
+                    b.ToTable("daily_aggregates", (string)null);
+                });
+
             modelBuilder.Entity("Waypoint.Api.Data.Entities.Interruption", b =>
                 {
                     b.Property<int>("Id")
@@ -80,6 +257,42 @@ namespace Waypoint.Api.Data.Migrations
                         .HasDatabaseName("ix_interruptions_started_at");
 
                     b.ToTable("interruptions", (string)null);
+                });
+
+            modelBuilder.Entity("Waypoint.Api.Data.Entities.MeetingRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean")
+                        .HasColumnName("active");
+
+                    b.Property<string>("Pattern")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("pattern");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("integer")
+                        .HasColumnName("project_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id")
+                        .HasName("pk_meeting_rules");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_meeting_rules_project_id");
+
+                    b.ToTable("meeting_rules", (string)null);
                 });
 
             modelBuilder.Entity("Waypoint.Api.Data.Entities.Person", b =>
@@ -148,6 +361,47 @@ namespace Waypoint.Api.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("id");
 
+                    b.Property<DateTime?>("CalendarLastSyncAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("calendar_last_sync_at");
+
+                    b.Property<string>("CalendarLastSyncError")
+                        .HasColumnType("text")
+                        .HasColumnName("calendar_last_sync_error");
+
+                    b.Property<string>("CalendarSource")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("calendar_source");
+
+                    b.Property<string>("GoogleAccount")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("google_account");
+
+                    b.Property<string>("GoogleRefreshTokenProtected")
+                        .HasColumnType("text")
+                        .HasColumnName("google_refresh_token_protected");
+
+                    b.Property<string>("InternalDomains")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("internal_domains");
+
+                    b.Property<int>("MaxMeetingMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_meeting_minutes");
+
+                    b.Property<bool>("ReviewReminderEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("review_reminder_enabled");
+
+                    b.Property<TimeOnly>("ReviewReminderTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("review_reminder_time");
+
                     b.Property<int>("TimerWarningMinutes")
                         .HasColumnType("integer")
                         .HasColumnName("timer_warning_minutes");
@@ -170,6 +424,25 @@ namespace Waypoint.Api.Data.Migrations
                         .HasName("pk_settings");
 
                     b.ToTable("settings", (string)null);
+                });
+
+            modelBuilder.Entity("Waypoint.Api.Data.Entities.TaskPlan", b =>
+                {
+                    b.Property<int>("TaskId")
+                        .HasColumnType("integer")
+                        .HasColumnName("task_id");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.HasKey("TaskId", "Date")
+                        .HasName("pk_task_plans");
+
+                    b.HasIndex("Date")
+                        .HasDatabaseName("ix_task_plans_date");
+
+                    b.ToTable("task_plans", (string)null);
                 });
 
             modelBuilder.Entity("Waypoint.Api.Data.Entities.TimeEntry", b =>
@@ -349,6 +622,41 @@ namespace Waypoint.Api.Data.Migrations
 
                     b.Navigation("Project");
                 });
+            modelBuilder.Entity("Waypoint.Api.Data.Entities.CalendarEvent", b =>
+                {
+                    b.HasOne("Waypoint.Api.Data.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_calendar_events_projects_project_id");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Waypoint.Api.Data.Entities.MeetingRule", b =>
+                {
+                    b.HasOne("Waypoint.Api.Data.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_meeting_rules_projects_project_id");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Waypoint.Api.Data.Entities.TaskPlan", b =>
+                {
+                    b.HasOne("Waypoint.Api.Data.Entities.WorkTask", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_task_plans_tasks_task_id");
+
+                    b.Navigation("Task");
+                });
+
 #pragma warning restore 612, 618
         }
     }

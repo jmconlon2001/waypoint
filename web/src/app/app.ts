@@ -7,6 +7,7 @@ import { ThemeService } from './core/theme.service';
 import { TimerStore } from './core/timer.store';
 import { ToastService } from './core/toast.service';
 import { UiStore } from './core/ui.store';
+import { ReminderService } from './core/reminder.service';
 import { isTypingTarget } from './shortcuts';
 import { InterruptionForm } from './shared/interruption-form';
 import { TaskEditor } from './shared/task-editor';
@@ -25,6 +26,8 @@ export class App implements OnInit {
   protected readonly toast = inject(ToastService);
   protected readonly ui = inject(UiStore);
   private readonly router = inject(Router);
+  // Started here so the daily-review reminder runs on every page.
+  private readonly reminder = inject(ReminderService);
 
   protected readonly anyModalOpen = computed(
     () => this.timer.interruptionFormOpen() || this.ui.taskEditor() !== null || this.ui.entryEditor() !== null || this.ui.shortcutsOpen());

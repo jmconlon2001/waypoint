@@ -2,7 +2,10 @@ using Waypoint.Api.Data.Entities;
 
 namespace Waypoint.Api.Domain;
 
-public sealed record SummaryEntry(DateTime StartedAt, DateTime? EndedAt, TimeEntryKind Kind, int? ProjectId, string? ProjectName, string? ProjectColor);
+public sealed record SummaryEntry(DateTime StartedAt, DateTime? EndedAt, TimeEntryKind Kind, int? ProjectId, string? ProjectName, string? ProjectColor, int? TaskId = null);
+
+/// <summary>A counted meeting (already filtered by <see cref="CalendarRules"/>).</summary>
+public sealed record SummaryMeeting(DateTime Start, DateTime End, int? ProjectId, string? ProjectName, string? ProjectColor);
 
 public sealed record ProjectTotal(int? ProjectId, string Name, string? Color, double Minutes);
 
@@ -15,13 +18,17 @@ public sealed record DailySummary(
     double InterruptionMinutes,
     double UnloggedMinutes,
     IReadOnlyList<ProjectTotal> ByProject,
-    IReadOnlyList<Interval> Gaps)
+    IReadOnlyList<Interval> Gaps,
+    double MeetingMinutes,
+    int MeetingCount)
 {
     public const string NoProject = "No project";
 
     /// <summary>
-    /// Totals for one local day. Entries and interruptions are clipped to the day (running ones end at
-    /// <paramref name="now"/>). Gaps are the parts of the work hours, up to now, covered by neither.
+    /// Totals for one local day. Entries, interruptions and counted meetings are clipped to the day
+    /// (running ones end at <paramref name="now"/>). Gaps are the parts of the work hours, up to now,
+    /// covered by none of them: counted meetings are tracked time. Meeting minutes are the union of
+    /// the meetings (overlapping meetings count once); rule-mapped meetings add to their project.
     /// </summary>
     public static DailySummary Build(
         Interval day,
@@ -29,7 +36,8 @@ public sealed record DailySummary(
         DateTime now,
         IEnumerable<SummaryEntry> entries,
         IEnumerable<(DateTime StartedAt, DateTime? EndedAt)> interruptions,
-        TimeSpan minGap)
+        TimeSpan minGap,
+        IEnumerable<SummaryMeeting>? meetings = null)
     {
         double task = 0, reactive = 0, untracked = 0;
         var byProject = new Dictionary<int, ProjectTotal>();
@@ -70,6 +78,20 @@ public sealed record DailySummary(
             busy.Add(clipped);
         }
 
+        var meetingIntervals = new List<Interval>();
+        foreach (var m in meetings ?? [])
+        {
+            if (Intervals.Clip(m.Start, m.End < now ? m.End : now, day.Start, day.End, now) is not { } clipped) continue; // future meetings don't count yet
+            meetingIntervals.Add(clipped);
+            busy.Add(clipped);
+            if (m.ProjectId is int pid)
+            {
+                byProject[pid] = byProject.TryGetValue(pid, out var cur)
+                    ? cur with { Minutes = cur.Minutes + clipped.Minutes }
+                    : new ProjectTotal(pid, m.ProjectName ?? $"Project {pid}", m.ProjectColor, clipped.Minutes);
+            }
+        }
+
         // Only look for gaps in the part of the work day that has already happened.
         var gapWindow = new Interval(workHours.Start, workHours.End < now ? workHours.End : now);
         var gaps = Intervals.Gaps(gapWindow, busy, minGap);
@@ -80,7 +102,8 @@ public sealed record DailySummary(
         return new DailySummary(
             Round(task), Round(reactive), Round(untracked), Round(task + reactive + untracked),
             count, Round(interruptionMinutes), Round(gaps.Sum(g => g.Minutes)),
-            projects, gaps);
+            projects, gaps,
+            Round(Intervals.Merge(meetingIntervals).Sum(i => i.Minutes)), meetingIntervals.Count);
     }
 
     private static double Round(double v) => Math.Round(v, 2);

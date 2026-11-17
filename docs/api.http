@@ -55,3 +55,70 @@ Content-Type: application/json
 
 ### Daily totals
 GET {{base}}/reports/daily?date=2026-11-17
+
+### ---------------- Phase 2 ----------------
+
+### Calendar status (source, Google connected?, last sync, errors)
+GET {{base}}/calendar/status
+
+### Sync now
+POST {{base}}/calendar/sync
+
+### Imported events for a range (counted flag, exclusion reason, meeting type, project)
+GET {{base}}/calendar/events?from=2026-11-16&to=2026-11-22
+
+### Choose the calendar source and meeting settings (Phase 1 fields are required)
+PUT {{base}}/settings
+Content-Type: application/json
+
+{ "workdayStart": "08:45", "workdayEnd": "17:30", "timerWarningMinutes": 180, "timeZone": "America/New_York",
+  "calendarSource": "ICal", "maxMeetingMinutes": 120, "internalDomains": "cfs.canon.com, canon.com",
+  "reviewReminderEnabled": true, "reviewReminderTime": "17:15" }
+
+### Google sign-in: open this in the browser (not via REST Client)
+# http://127.0.0.1:8080/api/calendar/google/connect?origin=http://127.0.0.1:8080
+
+### Meeting rules
+GET {{base}}/meeting-rules
+
+###
+POST {{base}}/meeting-rules
+Content-Type: application/json
+
+{ "pattern": "origination|AG failover", "projectId": 2, "sortOrder": null, "active": true }
+
+### Which project would a title get?
+POST {{base}}/meeting-rules/test
+Content-Type: application/json
+
+{ "title": "Weekly Origination sync" }
+
+### End-of-day rollover: candidates, then roll (task 7 opted out → backlog)
+GET {{base}}/tasks/rollover
+
+###
+POST {{base}}/tasks/rollover
+Content-Type: application/json
+
+{ "date": null, "skipTaskIds": [7] }
+
+### Weekly summary (any date; snaps to Monday)
+GET {{base}}/reports/weekly?start=2026-11-16
+
+### Interruptions by source / person / weekday×hour
+GET {{base}}/reports/interruptions?from=2026-11-01&to=2026-11-30
+
+### Planned vs actual
+GET {{base}}/reports/planned?from=2026-11-16&to=2026-11-22
+
+### Daily aggregates (missing past days are computed on the fly)
+GET {{base}}/aggregates?from=2026-11-01&to=2026-11-30
+
+### Recompute aggregates after fixing old data
+POST {{base}}/aggregates/recompute
+Content-Type: application/json
+
+{ "from": "2026-10-01", "to": "2026-11-30" }
+
+### CSV export: time-entries | interruptions | calendar-events | daily-aggregates
+GET {{base}}/export/time-entries.csv?from=2026-11-01&to=2026-11-30

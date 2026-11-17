@@ -14,7 +14,12 @@ public static class ApiEndpoints
 
         // Settings
         api.MapGet("/settings", (SettingsService s, CancellationToken ct) => s.GetDtoAsync(ct));
-        api.MapPut("/settings", (SettingsInput input, SettingsService s, CancellationToken ct) => s.UpdateAsync(input, ct));
+        api.MapPut("/settings", async (SettingsInput input, SettingsService s, CalendarService calendar, CancellationToken ct) =>
+        {
+            var result = await s.UpdateAsync(input, ct);
+            if (input.InternalDomains is not null) await calendar.ReclassifyAsync(ct); // meeting types depend on internal domains
+            return result;
+        });
 
         // Projects
         var projects = api.MapGroup("/projects");

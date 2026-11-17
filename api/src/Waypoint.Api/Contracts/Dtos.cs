@@ -103,8 +103,29 @@ public sealed record ConvertRequest(string? Title, int? ProjectId, WorkTaskStatu
 public sealed record ConvertResponse(InterruptionDto Interruption, TaskDto Task, TimeEntryDto Entry);
 
 /// <summary>Times are local wall-clock "HH:mm".</summary>
-public sealed record SettingsDto(string WorkdayStart, string WorkdayEnd, int TimerWarningMinutes, string TimeZone, IReadOnlyList<string> ProjectColors);
-public sealed record SettingsInput(string WorkdayStart, string WorkdayEnd, int TimerWarningMinutes, string TimeZone);
+public sealed record SettingsDto(
+    string WorkdayStart,
+    string WorkdayEnd,
+    int TimerWarningMinutes,
+    string TimeZone,
+    IReadOnlyList<string> ProjectColors,
+    CalendarSourceKind CalendarSource,
+    int MaxMeetingMinutes,
+    string InternalDomains,
+    bool ReviewReminderEnabled,
+    string ReviewReminderTime);
+
+/// <summary>Phase 2 fields are optional: null keeps the current value.</summary>
+public sealed record SettingsInput(
+    string WorkdayStart,
+    string WorkdayEnd,
+    int TimerWarningMinutes,
+    string TimeZone,
+    CalendarSourceKind? CalendarSource = null,
+    int? MaxMeetingMinutes = null,
+    string? InternalDomains = null,
+    bool? ReviewReminderEnabled = null,
+    string? ReviewReminderTime = null);
 
 public sealed record GapDto(DateTime Start, DateTime End, double Minutes);
 public sealed record ProjectTotalDto(int? ProjectId, string Name, string? Color, double Minutes);
@@ -118,7 +139,14 @@ public sealed record DailyTotalsDto(
     int InterruptionCount,
     double InterruptionMinutes,
     double UnloggedMinutes,
-    IReadOnlyList<ProjectTotalDto> ByProject);
+    IReadOnlyList<ProjectTotalDto> ByProject,
+    double MeetingMinutes,
+    int MeetingCount,
+    double PlannedFocusMinutes,
+    int CouldWaitCount,
+    int TaskSwitches,
+    int FocusBlocks,
+    double LongestFocusBlockMinutes);
 
 public sealed record ReviewDto(
     DateOnly Date,
@@ -130,7 +158,10 @@ public sealed record ReviewDto(
     IReadOnlyList<TimeEntryDto> Entries,
     IReadOnlyList<InterruptionDto> Interruptions,
     IReadOnlyList<GapDto> Gaps,
-    DailyTotalsDto Totals);
+    DailyTotalsDto Totals,
+    IReadOnlyList<CalendarEventDto> CalendarEvents,
+    IReadOnlyList<MeetingOverlapDto> Overlaps,
+    IReadOnlyList<FocusBlockDto> FocusBlocks);
 
 /// <summary>One-step gap fill: a project (as focus or reactive work) or "untracked".</summary>
 public sealed record GapFillRequest(DateTime Start, DateTime End, int? ProjectId, TimeEntryKind Kind, string? Note);

@@ -31,6 +31,14 @@ services:
     environment:
       ConnectionStrings__Waypoint: "Host=db;Port=5432;Database=${WAYPOINT_DB_NAME:-waypoint};Username=${WAYPOINT_DB_USER:-waypoint};Password=${WAYPOINT_DB_PASSWORD:-waypoint}"
       ASPNETCORE_ENVIRONMENT: Production
+      # Calendar (Phase 2): set these in deploy/.env (see README "Calendar setup").
+      Google__ClientId: ${GOOGLE_CLIENT_ID:-}
+      Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
+      Calendar__ICalUrl: ${CALENDAR_ICAL_URL:-}
+      Calendar__SyncIntervalMinutes: ${CALENDAR_SYNC_MINUTES:-15}
+      DataProtection__KeysPath: /data/keys
+    volumes:
+      - waypoint-keys:/data/keys
     depends_on:
       db:
         condition: service_healthy
@@ -51,3 +59,4 @@ services:
 
 volumes:
   waypoint-pgdata:
+  waypoint-keys:

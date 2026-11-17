@@ -2,9 +2,12 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.AspNetCore.DataProtection;
 using Waypoint.Api.Data;
 using Waypoint.Api.Endpoints;
+using Waypoint.Api.Integrations;
 using Waypoint.Api.Services;
+using Waypoint.Api.Workers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +34,28 @@ builder.Services.AddScoped<TimerService>();
 builder.Services.AddScoped<TimeEntryService>();
 builder.Services.AddScoped<InterruptionService>();
 builder.Services.AddScoped<ReviewService>();
+builder.Services.AddScoped<MetricsService>();
+builder.Services.AddScoped<ExportService>();
+builder.Services.AddScoped<CalendarService>();
+
+// Calendar sources (Phase 2). Secrets come from config/env: Google__ClientId, Google__ClientSecret, Calendar__ICalUrl.
+builder.Services.Configure<CalendarOptions>(builder.Configuration.GetSection("Calendar"));
+builder.Services.Configure<GoogleOptions>(builder.Configuration.GetSection("Google"));
+builder.Services.AddHttpClient<GoogleCalendarClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient<ICalUrlFeed>(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddTransient<ICalendarFeed>(sp => sp.GetRequiredService<GoogleCalendarClient>());
+builder.Services.AddTransient<ICalendarFeed>(sp => sp.GetRequiredService<ICalUrlFeed>());
+
+// Data Protection encrypts the Google refresh token; keys live on a volume so they survive restarts.
+var keysPath = builder.Configuration["DataProtection:KeysPath"]
+    ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Waypoint", "keys");
+Directory.CreateDirectory(keysPath);
+builder.Services.AddDataProtection()
+    .SetApplicationName("Waypoint")
+    .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+
+builder.Services.AddHostedService<CalendarSyncWorker>();
+builder.Services.AddHostedService<NightlyAggregateWorker>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -84,6 +109,7 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 
 app.MapWaypointApi();
+app.MapWaypointPhase2Api();
 
 app.Run();
 
