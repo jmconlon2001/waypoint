@@ -1,0 +1,22 @@
+# .NET
+bin/
+obj/
+*.user
+TestResults/
+
+# Node / Angular
+node_modules/
+web/dist/
+web/.angular/
+coverage/
+
+# Local data
+deploy/backups/
+deploy/.env
+*.dump
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vs/
