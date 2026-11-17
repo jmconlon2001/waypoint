@@ -1,0 +1,9 @@
+{
+  "dotnet.defaultSolution": "api/Waypoint.slnx",
+  "editor.formatOnSave": false,
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "web/.angular": true
+  }
+}
