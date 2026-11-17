@@ -1,4 +1,4 @@
-# Waypoint architecture (Phase 1)
+# Waypoint architecture (Phases 1-2)
 
 Waypoint is a single-user tool that runs on one Windows laptop. It has no login, so all ports are bound to `127.0.0.1`.
 
@@ -77,7 +77,13 @@ See [`api.http`](api.http) for runnable examples. In Development, the OpenAPI do
 | Timer | `GET /api/timer`, `POST /start`, `POST /pinned/{slot}`, `POST /stop` |
 | Time entries | `GET /api/time-entries?date=`, `POST`, `PUT/DELETE /{id}`, `POST /fill-gap` |
 | Interruptions | `GET /api/interruptions?date=`, `GET /{id}`, `POST /start`, `PUT /{id}`, `PUT /{id}/times`, `POST /{id}/resume`, `POST /{id}/convert`, `DELETE /{id}` |
-| Review | `GET /api/review?date=`, `GET /api/reports/daily?date=` |
+| Review | `GET /api/review?date=` (includes `calendarEvents`, `overlaps`, `focusBlocks`), `GET /api/reports/daily?date=` |
+| Calendar | `GET /api/calendar/status`, `POST /api/calendar/sync`, `GET /api/calendar/events?from&to`, `GET /api/calendar/google/connect?origin=`, `GET /api/calendar/google/callback`, `POST /api/calendar/google/disconnect` |
+| Meeting rules | `GET/POST /api/meeting-rules`, `PUT/DELETE /{id}`, `POST /test {title}` |
+| Rollover | `GET /api/tasks/rollover?date=`, `POST /api/tasks/rollover {date?, skipTaskIds}` |
+| Reports | `GET /api/reports/weekly?start=`, `GET /api/reports/interruptions?from&to`, `GET /api/reports/planned?from&to` |
+| Aggregates | `GET /api/aggregates?from&to`, `POST /api/aggregates/recompute {from, to}` |
+| Export | `GET /api/export/{time-entries\|interruptions\|calendar-events\|daily-aggregates}.csv?from&to` |
 
 Errors are RFC 7807 problem responses, and `title` holds a message the user can read.
 
@@ -95,11 +101,134 @@ Parsing happens on the server (`Domain/QuickAddParser.cs`):
 - `!1`-`!3` sets the priority.
 - An unknown or ambiguous project still adds the task, with a warning.
 
-## Hooks for later phases (not built)
+## Phase 2: calendar, metrics, rollover
 
-- **Google Calendar import:** `Integrations/ICalendarImportSource.cs` defines the interface. Meetings would come in as proposed time entries on the review page.
-- **Metrics beyond daily totals:** these would build on `Domain/DailySummary` across date ranges.
-- **LLM features:** these would call the existing services (review, time entries) rather than the database directly.
+### New tables
+
+| Table | Columns | Notes |
+|---|---|---|
+| `calendar_events` | id, source (`google`/`ical`), external_id, title, started_at, ended_at, all_day, attendee_count, recurring, event_type, attendee_domains, declined, meeting_type, project_id?, synced_at | A read-only copy of the calendar for a sync window (today −35 days … +14 days). Unique on (source, external_id). |
+| `meeting_rules` | id, pattern (regex), project_id, sort_order, active | First active match by sort order wins. |
+| `daily_aggregates` | date (PK), task/reactive/untracked/meeting/planned-focus/unlogged minutes, interruption count/minutes, could_wait_count, task_switches, focus_blocks, longest_focus_block_minutes, planned_tasks, planned_tasks_worked, planned/unplanned task minutes, meeting_count, computed_at | Filled nightly and recomputable. Today is always computed live. |
+| `task_plans` | task_id, date (composite PK) | Planned-for-day history. A task's `planned_date` moves when it rolls over; this table keeps every day it was planned. |
+
+`settings` gains these columns:
+
+- `calendar_source`
+- `max_meeting_minutes` (default 120)
+- `internal_domains`
+- `google_refresh_token_protected`
+- `google_account`
+- `calendar_last_sync_at`
+- `calendar_last_sync_error`
+- `review_reminder_enabled`
+- `review_reminder_time`
+
+### Calendar import (FR-C1)
+
+`ICalendarFeed` has two implementations:
+
+- **`GoogleCalendarClient`**: plain `HttpClient` against Calendar API v3, with no SDK.
+  - Sign-in uses the OAuth flow for installed apps with a loopback redirect and PKCE.
+  - It requests `access_type=offline`, so Google returns a refresh token.
+  - The refresh token is encrypted with Data Protection and kept in `settings`. Keys live in `/data/keys` (a volume).
+  - The access token is cached in memory.
+  - It reads `singleEvents=true`, so Google expands recurring events.
+- **`ICalUrlFeed`**: downloads the secret iCal URL and parses it with `Domain/ICalParser`. The parser supports:
+  - date-times in UTC, with TZID, floating, or date-only (all-day);
+  - RRULE with FREQ DAILY/WEEKLY/MONTHLY/YEARLY, plus INTERVAL, COUNT, UNTIL, BYDAY (including ordinals) and BYMONTHDAY;
+  - EXDATE;
+  - RECURRENCE-ID overrides.
+
+`CalendarService.SyncAsync`:
+
+- upserts events by (source, external_id);
+- deletes events in the window that have disappeared, plus events from a source that is no longer selected;
+- classifies each event and applies meeting rules;
+- records the last sync time and error.
+
+`CalendarSyncWorker` runs this every `Calendar:SyncIntervalMinutes` (15 by default) while a source is selected. `POST /api/calendar/sync` runs it on demand.
+
+### Meeting time (FR-C2, C4)
+
+An event **counts** as meeting time unless it is any of these:
+
+- all-day;
+- declined by you;
+- of a non-meeting type (`focusTime`, `outOfOffice`, `workingLocation`);
+- longer than `max_meeting_minutes`.
+
+Excluded events are returned with `counted=false` and an `exclusionReason`, and the review shows them greyed.
+
+- Counted meetings are busy time for gap detection.
+- `meetingMinutes` is the union of counted meetings clipped to the day and to *now*, so overlapping meetings count once and future meetings don't count yet.
+- Rule-mapped meetings add their minutes to the project's total.
+- Google `focusTime` blocks are summed as **planned focus** (`plannedFocusMinutes`), not tracked time.
+
+**Overlap flag.** A Task or Reactive time entry that overlaps a counted meeting by at least 1 minute appears in `review.overlaps` and is flagged on the timeline. The time is probably counted twice, so you can trim one of them.
+
+### Meeting types (FR-C3)
+
+`CalendarRules.Classify` applies these in order; the first match wins.
+
+| Type | Rule |
+|---|---|
+| Focus | Google eventType `focusTime` |
+| External | Any attendee domain is not internal (equal to, or a subdomain of, an internal domain). Only applies when internal domains are configured. |
+| 1:1 | Exactly 2 attendees (meeting rooms excluded) |
+| Recurring | Part of a recurring series |
+| Team | 3 or more attendees, one-off |
+| Ad hoc | Everything else: holds and invite-less calls |
+
+Types are stored on import, and recomputed when internal domains or rules change.
+
+### Metrics (FR-D2-D6)
+
+All metric logic is pure code in `Domain/Metrics.cs` and `Domain/DayMetrics.cs`, which makes it unit-testable.
+
+| Metric | Definition |
+|---|---|
+| Focus block | A continuous stretch of **25 minutes or more** on one task, from Task-kind entries. Back-to-back entries of the same task (≤ 1 minute apart) are joined. Any interruption start inside the stretch splits it. |
+| Task switch | The active timer changes to a different task (or to a different project/kind for entries without a task). Resuming the same task after an interruption is not a switch. |
+| Heatmap | Interruption starts bucketed by **local** weekday (Mon = 0) × hour, so 09:30 lands in the 9 o'clock bucket in both EST and EDT. |
+| Planned vs actual | Time on tasks planned for that day (`task_plans`) versus all other task/reactive time. The weekly view lists each planned task with its planned days, the time on those days and the time across the week. Starting a timer does **not** plan a task. |
+| Could have waited | Count and share of interruptions marked "could wait", by source and by person. |
+
+**Aggregates.** `NightlyAggregateWorker` runs:
+
+- on startup, filling up to 35 missing past days;
+- every night at 00:20 local, recomputing the previous 7 days.
+
+You can also call:
+
+- `POST /api/aggregates/recompute {from, to}` to rebuild a range;
+- `GET /api/aggregates`, which fills missing past days on demand.
+
+**Weekly report.** `GET /api/reports/weekly?start=` (any date; it snaps to Monday). It computes the current week live from raw data. The trend covers the previous 4 weeks and comes from `daily_aggregates`.
+
+### Rollover and reminder (FR-T5, R4)
+
+**Rollover.** `GET /api/tasks/rollover?date=` lists unfinished tasks on that day's Today list. `POST /api/tasks/rollover {date?, skipTaskIds}` then:
+
+- moves the tasks to `date + 1`, recording each in `task_plans`;
+- sends skipped tasks back to the backlog.
+
+Tasks planned for a later date no longer show on today's list.
+
+**Reminder.** `ReminderService` in the web app checks every 30 seconds whether the configured local time has passed. It shows one notification per day, through the service worker when there is one; clicking it opens `/review`. It only works while the app is open or installed.
+
+### CSV export (FR-D7)
+
+`GET /api/export/{dataset}.csv?from&to`, where `dataset` is `time-entries`, `interruptions`, `calendar-events` or `daily-aggregates`.
+
+- Encoding is UTF-8 with a BOM.
+- Fields follow RFC 4180 quoting.
+- Text that starts with `= + - @`, tab or CR gets a `'` prefix, so it can't run as a formula.
+- Times are given both as local time and as UTC.
+
+## Not built (Phase 3)
+
+LLM features (e.g. "summarise my week", suggested projects for gaps). These would call `MetricsService` and `ReviewService` rather than the database directly.
 
 ## Frontend
 
