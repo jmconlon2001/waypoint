@@ -51,8 +51,8 @@ public sealed class TaskService(WaypointDbContext db, SettingsService settings, 
     }
 
     /// <summary>
-    /// The Today list: open tasks planned for today or earlier (roll-over), or marked Today/Doing,
-    /// plus tasks completed today.
+    /// The Today list: open tasks planned for today or earlier (carried over), Doing tasks, tasks marked
+    /// Today without a date, plus tasks completed today. Tasks rolled over to tomorrow don't show.
     /// </summary>
     public async Task<List<TaskDto>> TodayAsync(CancellationToken ct = default)
     {
@@ -64,8 +64,8 @@ public sealed class TaskService(WaypointDbContext db, SettingsService settings, 
         var tasks = await db.Tasks.Include(t => t.Project)
             .Where(t =>
                 (t.Status != WorkTaskStatus.Done &&
-                    (t.Status == WorkTaskStatus.Today || t.Status == WorkTaskStatus.Doing ||
-                     (t.PlannedDate != null && t.PlannedDate <= today))) ||
+                    (t.Status == WorkTaskStatus.Doing ||
+                     (t.PlannedDate != null ? t.PlannedDate <= today : t.Status == WorkTaskStatus.Today))) ||
                 (t.Status == WorkTaskStatus.Done && t.CompletedAt >= day.Start && t.CompletedAt < day.End))
             .ToListAsync(ct);
 
@@ -90,6 +90,7 @@ public sealed class TaskService(WaypointDbContext db, SettingsService settings, 
         var task = new WorkTask { CreatedAt = Now() };
         await ApplyAsync(task, input, ct);
         db.Tasks.Add(task);
+        await RecordPlanAsync(task, ct);
         await db.SaveChangesAsync(ct);
         return await GetAsync(task.Id, ct);
     }
@@ -98,6 +99,7 @@ public sealed class TaskService(WaypointDbContext db, SettingsService settings, 
     {
         var task = await db.Tasks.FindAsync([id], ct) ?? throw ApiException.NotFound("Task");
         await ApplyAsync(task, input, ct);
+        await RecordPlanAsync(task, ct);
         await db.SaveChangesAsync(ct);
         return await GetAsync(id, ct);
     }
@@ -137,6 +139,7 @@ public sealed class TaskService(WaypointDbContext db, SettingsService settings, 
             CreatedAt = Now(),
         };
         db.Tasks.Add(task);
+        await RecordPlanAsync(task, ct);
         await db.SaveChangesAsync(ct);
         return new QuickAddResponse(await GetAsync(task.Id, ct), warning);
     }
@@ -145,17 +148,22 @@ public sealed class TaskService(WaypointDbContext db, SettingsService settings, 
     public async Task<TaskDto> PlanAsync(int id, bool today, CancellationToken ct = default)
     {
         var task = await db.Tasks.FindAsync([id], ct) ?? throw ApiException.NotFound("Task");
+        var todayDate = LocalTime.LocalDate(Now(), await settings.TimeZoneAsync(ct));
         if (today)
         {
-            task.PlannedDate = LocalTime.LocalDate(Now(), await settings.TimeZoneAsync(ct));
+            task.PlannedDate = todayDate;
             if (task.Status is WorkTaskStatus.Backlog or WorkTaskStatus.Done)
             {
                 task.Status = WorkTaskStatus.Today;
                 task.CompletedAt = null;
             }
+            await RecordPlanAsync(task, ct);
         }
         else
         {
+            // Taken off today's plan the same day: it wasn't really planned.
+            var plan = await db.TaskPlans.FirstOrDefaultAsync(p => p.TaskId == id && p.Date == todayDate, ct);
+            if (plan is not null) db.TaskPlans.Remove(plan);
             task.PlannedDate = null;
             task.PinSlot = null;
             if (task.Status is WorkTaskStatus.Today or WorkTaskStatus.Doing) task.Status = WorkTaskStatus.Backlog;
@@ -168,6 +176,7 @@ public sealed class TaskService(WaypointDbContext db, SettingsService settings, 
     {
         var task = await db.Tasks.FindAsync([id], ct) ?? throw ApiException.NotFound("Task");
         await SetStatusInternalAsync(task, status, ct);
+        await RecordPlanAsync(task, ct);
         await db.SaveChangesAsync(ct);
         return await GetAsync(id, ct);
     }
@@ -186,6 +195,58 @@ public sealed class TaskService(WaypointDbContext db, SettingsService settings, 
         task.PinSlot = slot;
         await db.SaveChangesAsync(ct);
         return await GetAsync(id, ct);
+    }
+
+    /// <summary>Unfinished tasks on the Today list of <paramref name="date"/> (default today): what rollover would move.</summary>
+    public async Task<List<TaskDto>> RolloverCandidatesAsync(DateOnly? date, CancellationToken ct = default)
+    {
+        var day = date ?? LocalTime.LocalDate(Now(), await settings.TimeZoneAsync(ct));
+        var tasks = await RolloverQuery(day).Include(t => t.Project).OrderBy(t => t.Priority).ThenBy(t => t.CreatedAt).ToListAsync(ct);
+        return await WithTrackedMinutesAsync(tasks, ct);
+    }
+
+    /// <summary>
+    /// FR-T5 end-of-day rollover: unfinished tasks planned on/before <c>date</c> (or marked Today/Doing)
+    /// move to the next day. Tasks in <c>SkipTaskIds</c> are opted out: they go back to the backlog.
+    /// </summary>
+    public async Task<RolloverResult> RolloverAsync(RolloverRequest request, CancellationToken ct = default)
+    {
+        var day = request.Date ?? LocalTime.LocalDate(Now(), await settings.TimeZoneAsync(ct));
+        var next = day.AddDays(1);
+        var skip = (request.SkipTaskIds ?? []).ToHashSet();
+        var tasks = await RolloverQuery(day).ToListAsync(ct);
+        int rolled = 0, unplanned = 0;
+        foreach (var t in tasks)
+        {
+            if (skip.Contains(t.Id))
+            {
+                t.PlannedDate = null;
+                t.PinSlot = null;
+                if (t.Status is WorkTaskStatus.Today or WorkTaskStatus.Doing) t.Status = WorkTaskStatus.Backlog;
+                unplanned++;
+                continue;
+            }
+            t.PlannedDate = next;
+            if (t.Status == WorkTaskStatus.Doing) t.Status = WorkTaskStatus.Today;
+            if (t.Status == WorkTaskStatus.Backlog) t.Status = WorkTaskStatus.Today;
+            await RecordPlanAsync(t, ct);
+            rolled++;
+        }
+        await db.SaveChangesAsync(ct);
+        return new RolloverResult(next, rolled, unplanned);
+    }
+
+    private IQueryable<WorkTask> RolloverQuery(DateOnly day) => db.Tasks.Where(t =>
+        t.Status != WorkTaskStatus.Done &&
+        (t.PlannedDate != null ? t.PlannedDate <= day : (t.Status == WorkTaskStatus.Today || t.Status == WorkTaskStatus.Doing)));
+
+    /// <summary>Remembers that the task was planned for its PlannedDate (planned-vs-actual history). Does not save.</summary>
+    private async Task RecordPlanAsync(WorkTask task, CancellationToken ct)
+    {
+        if (task.PlannedDate is not { } date || task.Status == WorkTaskStatus.Done) return;
+        if (db.TaskPlans.Local.Any(p => (p.Task == task || (task.Id != 0 && p.TaskId == task.Id)) && p.Date == date)) return;
+        if (task.Id != 0 && await db.TaskPlans.AnyAsync(p => p.TaskId == task.Id && p.Date == date, ct)) return;
+        db.TaskPlans.Add(new TaskPlan { Task = task, Date = date });
     }
 
     private async Task ApplyAsync(WorkTask task, TaskInput input, CancellationToken ct)

@@ -12,6 +12,10 @@ public class WaypointDbContext(DbContextOptions<WaypointDbContext> options) : Db
     public DbSet<Interruption> Interruptions => Set<Interruption>();
     public DbSet<Person> People => Set<Person>();
     public DbSet<Setting> Settings => Set<Setting>();
+    public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
+    public DbSet<MeetingRule> MeetingRules => Set<MeetingRule>();
+    public DbSet<DailyAggregate> DailyAggregates => Set<DailyAggregate>();
+    public DbSet<TaskPlan> TaskPlans => Set<TaskPlan>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -65,6 +69,44 @@ public class WaypointDbContext(DbContextOptions<WaypointDbContext> options) : Db
             e.ToTable("settings");
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.TimeZone).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CalendarSource).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.InternalDomains).HasMaxLength(1000).IsRequired();
+            e.Property(x => x.GoogleAccount).HasMaxLength(320);
+        });
+
+        b.Entity<CalendarEvent>(e =>
+        {
+            e.ToTable("calendar_events");
+            e.Property(x => x.Source).HasMaxLength(16).IsRequired();
+            e.Property(x => x.ExternalId).HasMaxLength(512).IsRequired();
+            e.Property(x => x.Title).HasMaxLength(500).IsRequired();
+            e.Property(x => x.EventType).HasMaxLength(32).IsRequired();
+            e.Property(x => x.AttendeeDomains).HasMaxLength(1000).IsRequired();
+            e.Property(x => x.MeetingType).HasConversion<string>().HasMaxLength(16);
+            e.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => new { x.Source, x.ExternalId }).IsUnique();
+            e.HasIndex(x => x.StartedAt);
+        });
+
+        b.Entity<MeetingRule>(e =>
+        {
+            e.ToTable("meeting_rules");
+            e.Property(x => x.Pattern).HasMaxLength(300).IsRequired();
+            e.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<DailyAggregate>(e =>
+        {
+            e.ToTable("daily_aggregates");
+            e.HasKey(x => x.Date);
+        });
+
+        b.Entity<TaskPlan>(e =>
+        {
+            e.ToTable("task_plans");
+            e.HasKey(x => new { x.TaskId, x.Date });
+            e.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.Date);
         });
 
         // snake_case column, key, foreign key and index names (PostgreSQL convention).
