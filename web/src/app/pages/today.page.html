@@ -76,7 +76,15 @@
 
 <!-- Stat tiles -->
 <div class="row g-3 mb-4">
-  <div class="col-6 col-xl-3">
+  <div class="col-6 col-lg">
+    <div class="card stat-card"><div class="card-body">
+      <div class="stat-label">Meetings</div>
+      <div class="stat-value">{{ fmt(totals()?.meetingMinutes) }}</div>
+      <div class="stat-foot">{{ totals()?.meetingCount ?? 0 }} so far, from your calendar</div>
+      <span class="stat-icon tint-cyan"><span class="i i-calendar"></span></span>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg">
     <div class="card stat-card"><div class="card-body">
       <div class="stat-label">Focus</div>
       <div class="stat-value">{{ fmt(totals()?.taskMinutes) }}</div>
@@ -84,15 +92,15 @@
       <span class="stat-icon"><span class="i i-target"></span></span>
     </div></div>
   </div>
-  <div class="col-6 col-xl-3">
+  <div class="col-6 col-lg">
     <div class="card stat-card"><div class="card-body">
       <div class="stat-label">Reactive</div>
       <div class="stat-value">{{ fmt(totals()?.reactiveMinutes) }}</div>
       <div class="stat-foot">Work that found you</div>
-      <span class="stat-icon tint-cyan"><span class="i i-inbox"></span></span>
+      <span class="stat-icon tint-green"><span class="i i-inbox"></span></span>
     </div></div>
   </div>
-  <div class="col-6 col-xl-3">
+  <div class="col-6 col-lg">
     <div class="card stat-card"><div class="card-body">
       <div class="stat-label">Interruptions</div>
       <div class="stat-value">{{ totals()?.interruptionCount ?? 0 }}<span class="fs-6 text-muted ms-2">{{ fmt(totals()?.interruptionMinutes) }}</span></div>
@@ -100,7 +108,7 @@
       <span class="stat-icon tint-warning"><span class="i i-zap"></span></span>
     </div></div>
   </div>
-  <div class="col-6 col-xl-3">
+  <div class="col-6 col-lg">
     <a class="card stat-card text-reset d-block" routerLink="/review"><div class="card-body">
       <div class="stat-label">Unlogged</div>
       <div class="stat-value">{{ fmt(totals()?.unloggedMinutes) }}</div>

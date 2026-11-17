@@ -2,6 +2,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
 import {
+  CalendarEvent, CalendarStatus, DailyAggregate, InterruptionStats, MeetingRule, PlannedTask, RolloverResult,
+  SettingsInput, SyncResult, WeeklyReport,
   ConvertResponse, DailyTotals, Interruption, InterruptionDetails, Person, Project, QuickAddResponse,
   ResumeResponse, Review, Settings, TaskInput, TaskStatus, TimeEntry, TimeEntryInput, TimeEntryKind,
   TimerState, WorkTask,
@@ -25,7 +27,7 @@ export class ApiService {
 
   // Settings
   getSettings() { return this.run(this.http.get<Settings>(`${this.base}/settings`)); }
-  saveSettings(s: Omit<Settings, 'projectColors'>) { return this.run(this.http.put<Settings>(`${this.base}/settings`, s)); }
+  saveSettings(s: SettingsInput) { return this.run(this.http.put<Settings>(`${this.base}/settings`, s)); }
 
   // Projects
   getProjects(includeInactive = false) {
@@ -82,6 +84,32 @@ export class ApiService {
     return this.run(this.http.post<ConvertResponse>(`${this.base}/interruptions/${id}/convert`, req));
   }
   deleteInterruption(id: number) { return this.run(this.http.delete<void>(`${this.base}/interruptions/${id}`)); }
+
+  // Calendar
+  getCalendarStatus() { return this.run(this.http.get<CalendarStatus>(`${this.base}/calendar/status`)); }
+  syncCalendar() { return this.run(this.http.post<SyncResult>(`${this.base}/calendar/sync`, {})); }
+  getCalendarEvents(from: string, to: string) { return this.run(this.http.get<CalendarEvent[]>(`${this.base}/calendar/events`, { params: this.params({ from, to }) })); }
+  disconnectGoogle() { return this.run(this.http.post<void>(`${this.base}/calendar/google/disconnect`, {})); }
+  /** Full-page navigation target for the Google consent screen. */
+  googleConnectUrl(origin: string) { return `${this.base}/calendar/google/connect?origin=${encodeURIComponent(origin)}`; }
+
+  getMeetingRules() { return this.run(this.http.get<MeetingRule[]>(`${this.base}/meeting-rules`)); }
+  createMeetingRule(r: { pattern: string; projectId: number; sortOrder: number | null; active: boolean | null }) { return this.run(this.http.post<MeetingRule>(`${this.base}/meeting-rules`, r)); }
+  updateMeetingRule(id: number, r: { pattern: string; projectId: number; sortOrder: number | null; active: boolean | null }) { return this.run(this.http.put<MeetingRule>(`${this.base}/meeting-rules/${id}`, r)); }
+  deleteMeetingRule(id: number) { return this.run(this.http.delete<void>(`${this.base}/meeting-rules/${id}`)); }
+  testMeetingRules(title: string) { return this.run(this.http.post<{ ruleId: number | null; projectId: number | null; projectName: string | null }>(`${this.base}/meeting-rules/test`, { title })); }
+
+  // Rollover
+  getRolloverCandidates(date: string | null) { return this.run(this.http.get<WorkTask[]>(`${this.base}/tasks/rollover`, { params: this.params({ date }) })); }
+  rollover(date: string | null, skipTaskIds: number[]) { return this.run(this.http.post<RolloverResult>(`${this.base}/tasks/rollover`, { date, skipTaskIds })); }
+
+  // Metrics
+  getWeekly(start: string | null) { return this.run(this.http.get<WeeklyReport>(`${this.base}/reports/weekly`, { params: this.params({ start }) })); }
+  getInterruptionStats(from: string, to: string) { return this.run(this.http.get<InterruptionStats>(`${this.base}/reports/interruptions`, { params: this.params({ from, to }) })); }
+  getPlanned(from: string, to: string) { return this.run(this.http.get<PlannedTask[]>(`${this.base}/reports/planned`, { params: this.params({ from, to }) })); }
+  getAggregates(from: string, to: string) { return this.run(this.http.get<DailyAggregate[]>(`${this.base}/aggregates`, { params: this.params({ from, to }) })); }
+  recomputeAggregates(from: string, to: string) { return this.run(this.http.post<{ from: string; to: string; days: number }>(`${this.base}/aggregates/recompute`, { from, to })); }
+  exportUrl(dataset: string, from: string, to: string) { return `${this.base}/export/${dataset}.csv?from=${from}&to=${to}`; }
 
   // Review / reports
   getReview(date: string | null) { return this.run(this.http.get<Review>(`${this.base}/review`, { params: this.params({ date }) })); }

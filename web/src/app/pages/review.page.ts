@@ -1,7 +1,7 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, errorMessage } from '../core/api.service';
-import { Gap, INTERRUPTION_SOURCES, Interruption, InterruptionSource, Review, TimeEntry, TimeEntryKind, sourceLabel } from '../core/models';
+import { Gap, INTERRUPTION_SOURCES, Interruption, InterruptionSource, MEETING_TYPE_LABELS, MeetingOverlap, Review, TimeEntry, TimeEntryKind, WorkTask, sourceLabel } from '../core/models';
 import { SettingsStore } from '../core/settings.store';
 import { TimerStore } from '../core/timer.store';
 import { ToastService } from '../core/toast.service';
@@ -28,6 +28,12 @@ export class ReviewPage {
   protected readonly fmt = formatMinutes;
   protected readonly sources = INTERRUPTION_SOURCES;
   protected readonly sourceLabel = sourceLabel;
+  protected readonly meetingLabels = MEETING_TYPE_LABELS;
+
+  // End-of-day rollover (FR-T5)
+  protected readonly rolloverTasks = signal<WorkTask[]>([]);
+  protected readonly rolloverSkip = signal<Set<number>>(new Set());
+  protected readonly rollingOver = signal(false);
 
   // Interruption editor state
   protected edSource: InterruptionSource | null = null;
@@ -48,11 +54,17 @@ export class ReviewPage {
     const r = this.review();
     return r ? ribbonSegments(r, this.timer.now(), this.settings.tz()) : null;
   });
+  protected readonly overlapsByEntry = computed(() => {
+    const map = new Map<number, MeetingOverlap[]>();
+    for (const o of this.review()?.overlaps ?? []) map.set(o.timeEntryId, [...(map.get(o.timeEntryId) ?? []), o]);
+    return map;
+  });
+  protected readonly allDayEvents = computed(() => (this.review()?.calendarEvents ?? []).filter((e) => e.allDay));
   protected readonly unclassified = computed(() => (this.review()?.interruptions ?? []).filter((i) => !i.sourceType && i.endedAt));
   protected readonly maxProject = computed(() => Math.max(1, ...(this.review()?.totals.byProject ?? []).map((p) => p.minutes)));
   protected readonly kindTotal = computed(() => {
     const t = this.review()?.totals;
-    return t ? Math.max(1, t.taskMinutes + t.reactiveMinutes + t.untrackedMinutes + t.unloggedMinutes) : 1;
+    return t ? Math.max(1, t.taskMinutes + t.reactiveMinutes + t.untrackedMinutes + t.unloggedMinutes + t.meetingMinutes) : 1;
   });
 
   constructor() {
@@ -69,8 +81,35 @@ export class ReviewPage {
   async load(): Promise<void> {
     try {
       this.review.set(await this.api.getReview(this.date()));
+      if (this.isToday()) {
+        this.rolloverTasks.set(await this.api.getRolloverCandidates(this.date()));
+      } else {
+        this.rolloverTasks.set([]);
+      }
     } catch (e) {
       this.toast.error(errorMessage(e));
+    }
+  }
+
+  toggleRollover(id: number): void {
+    const next = new Set(this.rolloverSkip());
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    this.rolloverSkip.set(next);
+  }
+
+  /** FR-T5: move unfinished Today tasks to tomorrow; unticked ones go back to the backlog. */
+  async rollover(): Promise<void> {
+    this.rollingOver.set(true);
+    try {
+      const r = await this.api.rollover(this.date(), [...this.rolloverSkip()]);
+      this.rolloverSkip.set(new Set());
+      this.toast.show(`${r.rolled} task${r.rolled === 1 ? '' : 's'} moved to tomorrow` + (r.unplanned ? `, ${r.unplanned} back to the backlog` : ''));
+      this.timer.bump();
+    } catch (e) {
+      this.toast.error(errorMessage(e));
+    } finally {
+      this.rollingOver.set(false);
     }
   }
 

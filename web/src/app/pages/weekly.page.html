@@ -1,0 +1,214 @@
+<div class="page-header">
+  <div>
+    <h1>Weekly summary</h1>
+    <p class="page-subtitle">{{ title() }} · where the week went, compared with the four before it.</p>
+  </div>
+  <div class="page-actions">
+    <button type="button" class="icon-btn" (click)="shift(-1)" aria-label="Previous week"><span class="i i-chevron-left"></span></button>
+    <button type="button" class="icon-btn" (click)="shift(1)" [disabled]="isThisWeek()" aria-label="Next week"><span class="i i-chevron-right"></span></button>
+    @if (!isThisWeek()) { <button type="button" class="btn btn-outline-secondary" (click)="thisWeek()">This week</button> }
+  </div>
+</div>
+
+@if (report(); as r) {
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-4">
+      <div class="card stat-card"><div class="card-body">
+        <div class="stat-label">Meetings</div><div class="stat-value">{{ fmt(r.kinds.meetings) }}</div>
+        <div class="stat-foot">{{ percent(r.kinds.meetings, tracked()) }}% of tracked</div>
+        <span class="stat-icon tint-cyan"><span class="i i-calendar"></span></span>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card stat-card"><div class="card-body">
+        <div class="stat-label">Focus</div><div class="stat-value">{{ fmt(r.kinds.focus) }}</div>
+        <div class="stat-foot">{{ fmt(r.kinds.plannedFocus) }} planned focus time</div>
+        <span class="stat-icon"><span class="i i-target"></span></span>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card stat-card"><div class="card-body">
+        <div class="stat-label">Reactive</div><div class="stat-value">{{ fmt(r.kinds.reactive) }}</div>
+        <div class="stat-foot">{{ fmt(r.kinds.untracked + r.kinds.unlogged) }} untracked/unlogged</div>
+        <span class="stat-icon tint-green"><span class="i i-inbox"></span></span>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card stat-card"><div class="card-body">
+        <div class="stat-label">Interruptions</div><div class="stat-value">{{ r.interruptions.count }}</div>
+        <div class="stat-foot">{{ percent(r.interruptions.couldWaitCount, r.interruptions.count) }}% could have waited</div>
+        <span class="stat-icon tint-warning"><span class="i i-zap"></span></span>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card stat-card"><div class="card-body">
+        <div class="stat-label">Focus blocks</div><div class="stat-value">{{ r.focusBlocks }}</div>
+        <div class="stat-foot">25+ min, uninterrupted</div>
+        <span class="stat-icon"><span class="i i-layers"></span></span>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card stat-card"><div class="card-body">
+        <div class="stat-label">Task switches</div><div class="stat-value">{{ r.taskSwitches }}</div>
+        <div class="stat-foot">{{ r.days.length ? (r.taskSwitches / r.days.length | number: '1.0-1') : 0 }} per day</div>
+        <span class="stat-icon tint-muted"><span class="i i-refresh"></span></span>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-8">
+      <div class="card h-100">
+        <div class="card-header"><h2>Day by day</h2><span class="cell-sub">hours</span></div>
+        <div class="card-body">
+          @if (dailyChart(); as c) { <app-chart [config]="c" [height]="280" label="Hours per day by kind" /> }
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-4">
+      <div class="card h-100">
+        <div class="card-header"><h2>By project</h2><span class="cell-sub num">{{ fmt(tracked()) }}</span></div>
+        <div class="card-body">
+          @if (projectChart(); as c) {
+            <app-chart [config]="c" [height]="280" label="Time by project" />
+          } @else {
+            <p class="text-muted mb-0">No project time this week.</p>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-8">
+      <div class="card h-100">
+        <div class="card-header"><h2>Trend</h2><span class="cell-sub">this week and the 4 before</span></div>
+        <div class="card-body">
+          @if (trendChart(); as c) { <app-chart [config]="c" [height]="260" label="Five-week trend" /> }
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-4">
+      <div class="card mb-4">
+        <div class="card-header"><h2>Longest focus block</h2></div>
+        <div class="card-body">
+          @if (r.longestFocusBlock; as b) {
+            <div class="stat-value num" style="font-size: 1.6rem">{{ fmt(b.minutes) }}</div>
+            <div class="cell-main mt-1">{{ b.taskTitle ?? 'Task #' + b.taskId }}</div>
+            <div class="cell-sub">{{ fmtDate(b.start.slice(0, 10)) }} · {{ clock(b.start) }}–{{ clock(b.end) }}</div>
+          } @else {
+            <p class="text-muted mb-0">No 25-minute uninterrupted stretch yet.</p>
+          }
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>Planned vs actual</h2></div>
+        <div class="card-body">
+          <div class="totals-row">
+            <span class="name"><span class="project-dot" [style.--pc]="'#2563eb'"></span>On planned tasks</span>
+            <span class="val">{{ fmt(r.plannedTaskMinutes) }}</span>
+            <div class="bar"><span [style.width.%]="percent(r.plannedTaskMinutes, r.plannedTaskMinutes + r.unplannedTaskMinutes)" style="--pc: #2563eb"></span></div>
+          </div>
+          <div class="totals-row mb-0">
+            <span class="name"><span class="project-dot" style="--pc: #10b981"></span>Everything else</span>
+            <span class="val">{{ fmt(r.unplannedTaskMinutes) }}</span>
+            <div class="bar"><span [style.width.%]="percent(r.unplannedTaskMinutes, r.plannedTaskMinutes + r.unplannedTaskMinutes)" style="--pc: #10b981"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-8">
+      <div class="card h-100">
+        <div class="card-header"><h2>When interruptions happen</h2><span class="cell-sub">weekday × hour, local time</span></div>
+        <div class="card-body">
+          @if (heatmap(); as hm) {
+            <div class="heatmap" [style.--cols]="hm.hours.length" role="table" aria-label="Interruptions by weekday and hour">
+              <span></span>
+              @for (h of hm.hours; track h) { <span class="hm-hour">{{ hourLabel(h) }}</span> }
+              @for (row of hm.rows; track row.label) {
+                <span class="hm-label">{{ row.label }}</span>
+                @for (c of row.cells; track c.hour) {
+                  <span class="hm-cell" [class.zero]="!c.count" [style.--v]="c.v" [title]="row.label + ' ' + hourLabel(c.hour) + ': ' + c.count"></span>
+                }
+              }
+            </div>
+            @if (!hm.max) { <p class="text-muted mt-3 mb-0">No interruptions logged this week.</p> }
+          }
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-4">
+      <div class="card mb-4">
+        <div class="card-header"><h2>Top sources</h2></div>
+        <div class="card-body">
+          <ul class="rank-list">
+            @for (s of r.interruptions.bySource.slice(0, 6); track s.key) {
+              <li><span>{{ s.label }}</span><span class="sub">{{ fmt(s.minutes) }}</span><span class="count">{{ s.count }}</span></li>
+            } @empty { <li class="text-muted">Nothing yet.</li> }
+          </ul>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>Top people</h2></div>
+        <div class="card-body">
+          <ul class="rank-list">
+            @for (p of r.interruptions.byPerson.slice(0, 6); track p.key) {
+              <li><span>{{ p.label }} @if (p.couldWaitCount) { <span class="pill pill-muted ms-1" title="Could have waited">{{ p.couldWaitCount }} could wait</span> }</span><span class="sub">{{ fmt(p.minutes) }}</span><span class="count">{{ p.count }}</span></li>
+            } @empty { <li class="text-muted">No names logged.</li> }
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-flush mb-4">
+    <div class="card-header"><h2>Planned tasks this week</h2><span class="cell-sub">days planned vs time spent</span></div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Task</th><th>Project</th><th>Planned</th><th class="text-end">On planned days</th><th class="text-end">This week</th><th>Status</th></tr></thead>
+          <tbody>
+            @for (t of r.plannedVsActual; track t.taskId) {
+              <tr>
+                <td class="cell-main">{{ t.title }}</td>
+                <td>@if (t.projectName) { <span class="project-pill" [style.--pc]="t.projectColor"><span class="project-dot"></span>{{ t.projectName }}</span> }</td>
+                <td class="cell-sub">{{ t.plannedDates.length }} day{{ t.plannedDates.length === 1 ? '' : 's' }} @if (t.plannedDates.length > 1) { <span class="pill pill-warning ms-1">rolled</span> }</td>
+                <td class="cell-mono text-end" [class.text-muted]="!t.minutesOnPlannedDays">{{ fmt(t.minutesOnPlannedDays) }}</td>
+                <td class="cell-mono text-end">{{ fmt(t.minutesInRange) }}</td>
+                <td><span class="pill" [class.pill-success]="t.status === 'Done'" [class.pill-muted]="t.status !== 'Done'">{{ t.status }}</span></td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="text-muted">No tasks were planned this week.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Export CSV</h2><span class="cell-sub">opens in Excel or Google Sheets</span></div>
+    <div class="card-body d-flex flex-wrap gap-2 align-items-end">
+      <div>
+        <label class="form-label" for="x-set">Data</label>
+        <select id="x-set" class="form-select" [(ngModel)]="exportDataset">
+          @for (x of exports; track x.value) { <option [value]="x.value">{{ x.label }}</option> }
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="x-from">From</label>
+        <input id="x-from" type="date" class="form-control" [(ngModel)]="exportFrom" />
+      </div>
+      <div>
+        <label class="form-label" for="x-to">To</label>
+        <input id="x-to" type="date" class="form-control" [(ngModel)]="exportTo" />
+      </div>
+      <a class="btn btn-primary" [href]="exportHref()" download><span class="i i-download"></span> Download</a>
+    </div>
+  </div>
+} @else if (loading()) {
+  <div class="empty"><span class="i i-timeline"></span><h3>Crunching the week…</h3></div>
+}

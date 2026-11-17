@@ -17,7 +17,7 @@ describe('App shell', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.brand-text')?.textContent).toContain('Waypoint');
-    expect(el.querySelectorAll('.sidebar-nav a.nav-item-link').length).toBe(4);
+    expect(el.querySelectorAll('.sidebar-nav a.nav-item-link').length).toBe(5);
     TestBed.inject(HttpTestingController);
   });
 

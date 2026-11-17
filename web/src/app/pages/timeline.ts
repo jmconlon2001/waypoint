@@ -1,24 +1,26 @@
-import { Gap, Interruption, Review, TimeEntry } from '../core/models';
+import { CalendarEvent, Gap, Interruption, Review, TimeEntry } from '../core/models';
 import { formatClock } from '../core/time';
 
 export type TimelineItem =
   | { type: 'entry'; start: string; end: string | null; entry: TimeEntry }
   | { type: 'interruption'; start: string; end: string | null; interruption: Interruption }
-  | { type: 'gap'; start: string; end: string; gap: Gap };
+  | { type: 'gap'; start: string; end: string; gap: Gap }
+  | { type: 'event'; start: string; end: string; event: CalendarEvent };
 
-/** Entries, interruptions and gaps of a day in chronological order. */
+/** Entries, interruptions, timed calendar events and gaps of a day in chronological order (all-day events are listed separately). */
 export function buildTimeline(r: Review): TimelineItem[] {
   const items: TimelineItem[] = [
     ...r.entries.map((e) => ({ type: 'entry' as const, start: e.startedAt, end: e.endedAt, entry: e })),
     ...r.interruptions.map((i) => ({ type: 'interruption' as const, start: i.startedAt, end: i.endedAt, interruption: i })),
     ...r.gaps.map((g) => ({ type: 'gap' as const, start: g.start, end: g.end, gap: g })),
+    ...(r.calendarEvents ?? []).filter((e) => !e.allDay).map((e) => ({ type: 'event' as const, start: e.startedAt, end: e.endedAt, event: e })),
   ];
-  const order = { entry: 0, interruption: 1, gap: 2 };
+  const order = { event: 0, entry: 1, interruption: 2, gap: 3 };
   return items.sort((a, b) => a.start.localeCompare(b.start) || order[a.type] - order[b.type]);
 }
 
 export interface RibbonSegment {
-  kind: 'entry' | 'interruption' | 'gap' | 'now';
+  kind: 'entry' | 'interruption' | 'gap' | 'now' | 'meeting' | 'context' | 'focus-plan';
   left: number;
   width: number;
   color: string | null;
@@ -27,6 +29,7 @@ export interface RibbonSegment {
 }
 
 export interface Ribbon {
+  hasCalendar: boolean;
   segments: RibbonSegment[];
   ticks: { label: string; left: number }[];
 }
@@ -43,7 +46,9 @@ export function ribbonSegments(r: Review, nowMs: number, tz: string): Ribbon {
 
   let from = Date.parse(r.workStart);
   let to = Date.parse(r.workEnd);
-  for (const x of [...r.entries.map((e) => [e.startedAt, e.endedAt] as const), ...r.interruptions.map((i) => [i.startedAt, i.endedAt] as const)]) {
+  const timedEvents = (r.calendarEvents ?? []).filter((e) => !e.allDay);
+  const counted = timedEvents.filter((e) => e.counted).map((e) => [e.startedAt, e.endedAt] as const);
+  for (const x of [...r.entries.map((e) => [e.startedAt, e.endedAt] as const), ...r.interruptions.map((i) => [i.startedAt, i.endedAt] as const), ...counted]) {
     from = Math.min(from, clamp(Date.parse(x[0])));
     to = Math.max(to, endOf(x[1]));
   }
@@ -71,6 +76,15 @@ export function ribbonSegments(r: Review, nowMs: number, tz: string): Ribbon {
     const s = clamp(Date.parse(i.startedAt)), e = endOf(i.endedAt);
     segments.push({ kind: 'interruption', left: pct(s), width: pct(e) - pct(s), color: null, title: `Interruption ${formatClock(i.startedAt, tz)}–${i.endedAt ? formatClock(i.endedAt, tz) : 'now'}` });
   }
+  for (const ev of timedEvents) {
+    const s = Math.max(from, clamp(Date.parse(ev.startedAt))), e = Math.min(to, clamp(Date.parse(ev.endedAt)));
+    if (e <= s) continue;
+    const kind = ev.plannedFocus ? 'focus-plan' : ev.counted ? 'meeting' : 'context';
+    segments.unshift({
+      kind, left: pct(s), width: pct(e) - pct(s), color: ev.counted ? (ev.projectColor ?? '#0891b2') : null,
+      title: `${ev.title} ${formatClock(ev.startedAt, tz)}–${formatClock(ev.endedAt, tz)}${ev.counted ? '' : ` (${ev.exclusionReason})`}`,
+    });
+  }
   if (nowMs > from && nowMs < to) segments.push({ kind: 'now', left: pct(nowMs), width: 0, color: null, title: 'Now' });
 
   const hours = Math.round(span / hour);
@@ -80,5 +94,5 @@ export function ribbonSegments(r: Review, nowMs: number, tz: string): Ribbon {
     const t = from + h * hour;
     ticks.push({ label: formatClock(new Date(t).toISOString(), tz).replace(':00', ''), left: pct(t) });
   }
-  return { segments, ticks };
+  return { hasCalendar: timedEvents.length > 0, segments, ticks };
 }
