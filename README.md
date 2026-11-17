@@ -58,7 +58,7 @@ Not built yet (hooks only): Google Calendar import, metrics beyond daily totals,
 |---|---|
 | [Podman Desktop](https://podman-desktop.io) (Podman + a WSL2 machine, with the compose extension) | Running the pod |
 | [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) | API development and tests |
-| [Node.js 22 LTS](https://nodejs.org) (npm 10) | Web development and tests |
+| [Node.js 22 LTS](https://nodejs.org), 22.22.3 or later (npm 10) | Web development and tests (Angular 22 requirement) |
 | VS Code (optional) | The repo includes `.vscode/` with recommended extensions, tasks and launch configs |
 
 ## Run it in Podman (day-to-day use)
