@@ -38,7 +38,7 @@ public sealed class InterruptionService(
         var open = await db.Interruptions.Where(i => i.EndedAt == null).OrderByDescending(i => i.StartedAt).FirstOrDefaultAsync(ct);
         if (open is not null)
         {
-            if (details is not null) await ApplyDetailsAsync(open, details, requireSource: false, ct);
+            if (HasDetails(details)) await ApplyDetailsAsync(open, details, requireSource: false, ct);
             await db.SaveChangesAsync(ct);
             return await GetAsync(open.Id, ct);
         }
@@ -46,7 +46,7 @@ public sealed class InterruptionService(
         var now = Now();
         var paused = await timer.StopRunningAsync(now, ct);
         var interruption = new Interruption { StartedAt = now, PausedTimeEntry = paused };
-        if (details is not null) await ApplyDetailsAsync(interruption, details, requireSource: false, ct);
+        if (HasDetails(details)) await ApplyDetailsAsync(interruption, details, requireSource: false, ct);
         db.Interruptions.Add(interruption);
         await db.SaveChangesAsync(ct);
         return await GetAsync(interruption.Id, ct);
@@ -78,7 +78,7 @@ public sealed class InterruptionService(
     {
         var i = await db.Interruptions.Include(x => x.PausedTimeEntry).FirstOrDefaultAsync(x => x.Id == id, ct)
                 ?? throw ApiException.NotFound("Interruption");
-        if (details is not null) await ApplyDetailsAsync(i, details, requireSource: false, ct);
+        if (HasDetails(details)) await ApplyDetailsAsync(i, details, requireSource: false, ct);
 
         var now = Now();
         i.EndedAt ??= now;
@@ -198,6 +198,14 @@ public sealed class InterruptionService(
         i.Note = string.IsNullOrWhiteSpace(d.Note) ? null : d.Note.Trim();
         i.CouldWait = d.CouldWait;
     }
+
+    /// <summary>
+    /// "Back to work" and "Interrupted" send an empty body when there's no form to save. That must not wipe
+    /// details saved earlier (person, note, could-wait), so an all-empty body counts as "no details".
+    /// </summary>
+    private static bool HasDetails(InterruptionDetails? d) =>
+        d is not null && (d.SourceType is not null || d.PersonId is not null || !string.IsNullOrWhiteSpace(d.PersonName) ||
+                          !string.IsNullOrWhiteSpace(d.Note) || d.CouldWait is not null);
 
     private static string DefaultTitle(Interruption i)
     {

@@ -578,4 +578,21 @@ public class Phase2Tests
         Assert.Equal(["Replaced \"Admin\""], r.Adjusted);
         Assert.False(await app.Db.TimeEntries.AnyAsync(e => e.Project!.Name == "Admin"));
     }
+
+    [Fact]
+    public async Task Back_to_work_with_an_empty_body_keeps_saved_interruption_details()
+    {
+        using var app = new TestApp();
+        var i = await app.Interruptions.StartAsync(null);
+        await app.Interruptions.UpdateAsync(i.Id, new InterruptionDetails(InterruptionSource.WalkUp, null, "Marcus", "Report access", true));
+        app.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        // What the "b" shortcut / "Back to work" button sends.
+        var r = await app.Interruptions.ResumeAsync(i.Id, new InterruptionDetails(null, null, null, null, null));
+
+        Assert.Equal("Marcus", r.Interruption.PersonName);
+        Assert.Equal("Report access", r.Interruption.Note);
+        Assert.True(r.Interruption.CouldWait);
+        Assert.Equal(InterruptionSource.WalkUp, r.Interruption.SourceType);
+    }
 }

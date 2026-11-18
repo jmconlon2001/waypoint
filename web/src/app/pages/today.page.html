@@ -11,6 +11,47 @@
   </div>
 </div>
 
+<!-- Past-due tasks (any open task, planned or not) -->
+@if (overdue().length) {
+  <div class="card overdue-card mb-4">
+    <div class="card-header">
+      <h2><span class="i i-alert"></span> Past due <span class="overdue-count">{{ overdue().length }}</span></h2>
+      <span class="cell-sub">Do it today, push it to tomorrow, or close it out.</span>
+    </div>
+    <ul class="overdue-list">
+      @for (t of showAllOverdue() ? overdue() : overdue().slice(0, 5); track t.id) {
+        <li>
+          <span class="priority" [class]="'priority-' + t.priority" [title]="'Priority ' + t.priority">{{ t.priority }}</span>
+          <div class="min-w-0">
+            <div class="task-title" role="button" (click)="ui.taskEditor.set(t)">{{ t.title }}</div>
+            <div class="task-meta">
+              <span class="due-overdue"><span class="i i-calendar"></span> Due {{ fmtDate(t.dueDate) }} · {{ lateBy(t.dueDate!) }}</span>
+              @if (t.projectName) { <span class="project-pill" [style.--pc]="t.projectColor"><span class="project-dot"></span>{{ t.projectName }}</span> }
+              @if (t.status === 'Blocked') { <span class="pill pill-danger">Blocked</span> }
+              @if (isPlannedToday(t)) { <span class="pill pill-accent">On today's list</span> }
+            </div>
+          </div>
+          <div class="overdue-actions">
+            @if (!isPlannedToday(t)) {
+              <button type="button" class="btn btn-sm btn-outline-secondary" (click)="overduePlanToday(t)"><span class="i i-sunrise"></span> Today</button>
+            }
+            <button type="button" class="btn btn-sm btn-outline-secondary" (click)="overdueTomorrow(t)" title="Plan for tomorrow"><span class="i i-arrow-right"></span> Tomorrow</button>
+            <button type="button" class="icon-btn icon-btn-sm" (click)="overdueDone(t)" title="Mark done"><span class="i i-check"></span></button>
+            <button type="button" class="icon-btn icon-btn-sm" (click)="ui.taskEditor.set(t)" title="Edit (change the due date)"><span class="i i-edit"></span></button>
+          </div>
+        </li>
+      }
+    </ul>
+    @if (overdue().length > 5) {
+      <div class="px-3 pb-3">
+        <button type="button" class="btn btn-sm btn-ghost" (click)="showAllOverdue.set(!showAllOverdue())">
+          {{ showAllOverdue() ? 'Show fewer' : 'Show all ' + overdue().length }}
+        </button>
+      </div>
+    }
+  </div>
+}
+
 <!-- Running timer -->
 @if (timer.interruption(); as i) {
   <div class="card timer-hero interrupted mb-4">

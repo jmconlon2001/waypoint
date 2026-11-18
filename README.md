@@ -1,85 +1,127 @@
 # Waypoint
 
-A personal work tracker for one person on one laptop. Waypoint tracks:
+A personal work tracker for one person on one laptop. It answers **where did my time go?** by project, and how much of it was meetings, focus work, reactive work and interruptions.
 
-- **todos**,
-- **what you are working on**, with task timers,
-- **interruptions**,
+Nothing monitors your desktop. Time comes from:
 
-so the end of the day can answer *where did the time go?*
+- task timers you start and stop;
+- entries you add after the fact;
+- your Google Calendar (read-only, optional);
+- a one-click **Interrupted** button.
 
-There is no desktop agent and no activity monitoring. Everything comes from:
+The goal is under five minutes of data entry a day, including the end-of-day review. All data stays on your machine: Waypoint runs in Podman, and every port is bound to `127.0.0.1`.
 
-- a timer you start,
-- an entry you add after the fact,
-- a one-click "Interrupted" button.
+> The screenshots below use made-up sample data.
 
-The target is under five minutes of data entry a day. All data stays on the machine: Waypoint runs in Podman, and every port is bound to `127.0.0.1`.
+## A tour of the app
 
-## What's in Phase 1
+### Today
 
-- **Tasks:**
-  - Fields: title, project, priority 1-3, due date, notes, status (Backlog / Today / Doing / Blocked / Done), planned date.
-  - Configurable projects with colors. Seeded with SOX/J-SOX, Origination, Extractor migration, People management and Admin.
-  - **Quick add** shorthand: `Review AG failover #origination !1`, parsed on the server.
-  - Mark tasks for **Today**.
-- **Time tracking:**
-  - One-click timers. Only one runs at a time, and it is stored on the server, so it survives closing the browser.
-  - Add or edit entries after the fact: a task or just a project, start, end, note, and kind (task, reactive or untracked).
-  - Warnings when a timer runs longer than 3 h (configurable) or crosses midnight.
-- **Interruptions:**
-  - **Interrupted** pauses the timer and opens a short form with source, optional person (autocomplete) and optional note.
-  - **Back to work** resumes the paused task and records how long the interruption took.
-  - Any interruption can be **converted into a task**, with its time attached.
-- **Daily review:**
-  - A timeline of entries, interruptions and **gaps** (untracked time within work hours, 08:45-17:30 by default).
-  - Fill a gap in one step: pick a project or "untracked".
-- **Reports:** daily totals by project and by kind (focus, reactive, untracked), plus an interruptions total.
-- **Keyboard shortcuts:**
+![Today page](docs/screenshots/today.png)
 
-  | Key | Action |
-  |---|---|
-  | `s` | Start/stop the timer |
-  | `1`-`5` | Switch to a pinned task |
-  | `i` | Interrupted |
-  | `b` | Back to work |
-  | `q` | Quick add |
-  | `n` | New task |
-  | `l` | Log time |
-  | `?` | Help |
+Where the day starts.
 
-- **Light and dark themes.** Follows the OS, or saves your choice. The look is borrowed from Keyport, recolored blue/green.
+- **Past due** lists every open task whose due date has passed, oldest first, planned for today or not. Each one has buttons to do it **Today**, push it to **Tomorrow**, mark it done, or edit it to change the due date.
+- **The running timer.** One click starts a timer on a task. Only one runs at a time, and starting another stops the current one. The timer is stored on the server, so it keeps running if you close the browser. A warning shows if a timer has run longer than 3 hours (configurable) or past midnight.
+- **Interrupted** pauses the timer and opens a short form:
+  - source: walk-up, Google Chat, email, phone, meeting overrun or self-distraction;
+  - optional person, with autocomplete from past entries;
+  - optional note, and whether it could have waited.
 
-## What's in Phase 2
+  **Back to work** (`b`) resumes the paused task and records how long the interruption took. An interruption can also be saved as a task, with its time attached as reactive work.
+- **Today's tasks**, with a **quick add** box: `Review AG failover #origination !1` creates a task in the Origination project with priority 1. On each task you can:
+  - start or stop its timer;
+  - pin it to a number key (`1`-`5`);
+  - mark it blocked;
+  - send it back to the backlog;
+  - tick it done.
+- **Reactive work** starts a timer for email or ad hoc asks with no planned task. It counts as reactive, not focus.
+- Tiles for today's focus, meetings, reactive time, interruptions and unlogged time, plus time by project.
 
-- **Calendar import (read-only).**
-  - Paste your Google Calendar's *Secret address in iCal format* under **Projects & settings → Google Calendar**. It syncs every 15 minutes and on demand.
-  - No OAuth client is needed. The address must be an `https://calendar.google.com` URL, is stored only in the local database, and is never sent back to the browser.
-  - Meetings count as time with no data entry. Events that don't count:
-    - all-day events;
-    - events marked free or declined;
-    - events longer than the limit (120 minutes by default, configurable).
-  - **Focus Time** events count as *planned focus*, not meetings.
-  - Meeting types are assigned automatically: 1:1, team, external, recurring, ad hoc. **Meeting rules** map a title to a project (e.g. "SOX" → SOX/J-SOX).
-  - Where a timer ran during a meeting, the meeting wins in the totals and the review flags the overlap.
-- **Daily review additions:**
-  - meetings on the timeline;
-  - focus blocks and task switches;
-  - **planned vs. actual**;
-  - **roll-over** of unfinished Today tasks to the next work day (or back to the backlog).
-- **Insights page (weekly summary):**
-  - time by kind (focus, meetings, reactive, untracked, unlogged) per day, with a table view;
-  - time by project and meetings by type;
-  - interruptions by source and person, and a weekday × hour heatmap;
-  - longest focus block, planned vs. actual;
-  - the trend against your previous 4 weeks (weeks with data only).
-- **CSV export** of time entries, interruptions, meetings and daily totals, for this week or the last 30 days.
-- **Reactive timer** on the Today page, for email and ad hoc asks with no planned task.
-- **Daily review reminder** at a time you choose: a toast, and optionally a desktop notification, while Waypoint is open.
+### Tasks
 
-Not built yet: LLM features and Google Tasks import (Phase 3). See [docs/architecture.md](docs/architecture.md).
+![Tasks page](docs/screenshots/tasks.png)
 
-> **Policy (NFR-7):** the calendar feed is the only outbound call. It uses the secret iCal address rather than an OAuth client, but it still reads calendar data from Google, so confirm with InfoSec before turning it on.
+Everything on your plate:
+
+- Filter by Open, Today, Tomorrow, Backlog, Blocked, Done or All, by project, or with text search.
+- Each task has a title, project, priority (1-3), due date, notes, status (Backlog / Today / Doing / Blocked / Done) and planned date.
+- The **Planned** column moves a task in one click:
+  - **Today** puts it on today's list;
+  - **Tomorrow** plans it for tomorrow, and it appears on the Today page then;
+  - **×** unplans it.
+- Overdue due dates are highlighted, and each task shows the total time tracked on it.
+
+### Daily review
+
+![Daily review page](docs/screenshots/review.png)
+
+The end-of-day check, usually a couple of minutes:
+
+- **Timeline** of the day: meetings from your calendar, time entries, interruptions, and **gaps**, which are untracked time within your work hours (08:45-17:30 by default).
+- **Fill a gap in one step**: pick a project or "untracked" and it becomes a time entry, or open the full form for a task and note.
+- **Warnings that need a click**:
+  - interruptions with no source;
+  - a timer that ran during a meeting (the meeting wins in the totals);
+  - two entries that cover the same time.
+- **Still open today**: tick the unfinished tasks and roll them over to the next work day, or send them back to the backlog.
+- **Planned vs. actual**: time on the tasks you planned, against unplanned work, meetings and reactive work.
+- Totals by kind and by project, the number of **focus blocks** (25+ minutes on one task with no interruption) and **task switches**.
+
+Adding or editing a time entry never double-counts. If a new entry overlaps an existing one, the existing one is trimmed, split around it, or replaced, and a toast says what changed. A running timer that gets split keeps running.
+
+### Insights
+
+![Insights page](docs/screenshots/insights.png)
+
+The weekly summary:
+
+- **Where the week went**: focus, meetings, reactive, untracked and unlogged time per day. Hover for details, or switch to the table view.
+- Each stat tile compares the week with your **average over the previous 4 weeks**. Weeks with no data are skipped, so a new install isn't compared with zeros.
+- **When interruptions happen**: a weekday × hour heatmap, plus breakdowns by source and by person, so you can see whose questions could be batched.
+- Time **by project**, **meetings by type** (1:1, team, external, recurring, ad hoc), **planned vs. actual** for the week, and the **longest focus block**.
+- **Export CSV** of time entries, interruptions, meetings or daily totals, for this week or the last 30 days.
+
+Dark mode, which follows your OS or a saved choice:
+
+![Insights page in dark mode](docs/screenshots/insights-dark.png)
+
+### Projects & settings
+
+![Projects and settings page](docs/screenshots/settings.png)
+
+- **Projects**, each with a color from a fixed palette.
+- **People**, added automatically from interruptions. You can rename or delete them here.
+- **Work day**:
+  - work hours, used for gap detection;
+  - the long-timer warning;
+  - the longest event that still counts as a meeting (default 120 minutes, so holds, OOO and trainings don't count);
+  - a **daily review reminder** time;
+  - your time zone.
+- **Google Calendar**: paste your calendar's *Secret address in iCal format* (Google Calendar → Settings → your calendar → Integrate calendar). Waypoint syncs it every 15 minutes, and on demand, read-only.
+  - Events that don't count as meeting time: all-day, free, declined, and longer than the limit.
+  - **Focus Time** events count as planned focus.
+  - The address is stored only in the local database and is never shown again.
+- **Meeting rules**: "title contains *SOX*" → SOX/J-SOX project. The first matching rule wins, and a new rule also applies to past meetings.
+
+> **Policy (NFR-7):** the calendar feed is the only outbound call Waypoint makes. It reads calendar data from Google, so confirm with InfoSec before turning it on. It only accepts `https://calendar.google.com` addresses.
+
+### Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `s` | Start/stop the timer |
+| `1`-`5` | Switch to a pinned task |
+| `i` | Interrupted |
+| `b` | Back to work |
+| `q` | Quick add |
+| `n` | New task |
+| `l` | Log time |
+| `?` | Help |
+
+### Not built yet
+
+Phase 3 is not built: LLM features (natural-language entry, gap-fill suggestions, a weekly narrative and so on) and Google Tasks import. See [deploy/requirements.md](deploy/requirements.md) for the full requirements and [docs/architecture.md](docs/architecture.md) for how the app works.
 
 ## Prerequisites
 
@@ -229,6 +271,7 @@ waypoint/
 │  └─ .env.example
 ├─ docs/
 │  ├─ architecture.md               # data model, flows, API surface, later-phase hooks
-│  └─ api.http                      # REST Client examples
+│  ├─ api.http                      # REST Client examples
+│  └─ screenshots/                  # README screenshots (sample data)
 └─ .vscode/                         # extensions, tasks, launch configs
 ```

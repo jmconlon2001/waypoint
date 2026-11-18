@@ -643,3 +643,16 @@ button.topbar-chip { cursor: pointer; }
 /* Six stat tiles in one row only where they fit; three per row below that. */
 @media (min-width: 1600px) { .tiles-6 > * { flex: 0 0 auto; width: 16.6667%; } }
 .stat-card .stat-label { padding-right: 46px; }
+
+/* Past-due callout (Today) and plan cell (Tasks) */
+.overdue-card { border-color: color-mix(in srgb, var(--sm-danger) 45%, var(--sm-border)); }
+.overdue-card .card-header { background: color-mix(in srgb, var(--sm-danger) 7%, var(--sm-surface)); border-radius: var(--sm-radius) var(--sm-radius) 0 0; }
+.overdue-card .card-header h2 { display: flex; align-items: center; gap: .45rem; }
+.overdue-card .card-header h2 .i { color: var(--sm-danger); }
+.overdue-count { display: inline-grid; place-items: center; min-width: 1.4rem; height: 1.4rem; padding: 0 .35rem; border-radius: 999px; background: var(--sm-danger); color: #fff; font-size: .75rem; font-family: var(--sm-mono); }
+.overdue-list { list-style: none; margin: 0; padding: 0; }
+.overdue-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .8rem; align-items: center; padding: .65rem 1.1rem; border-bottom: 1px solid var(--sm-border); }
+.overdue-list li:last-child { border-bottom: 0; }
+.overdue-actions { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.plan-cell { display: flex; gap: .35rem; align-items: center; flex-wrap: nowrap; }
+@media (max-width: 767.98px) { .overdue-list li { grid-template-columns: auto minmax(0, 1fr); } .overdue-actions { grid-column: 1 / -1; justify-content: flex-start; } }

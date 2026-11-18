@@ -6,9 +6,9 @@ import { SettingsStore } from '../core/settings.store';
 import { TimerStore } from '../core/timer.store';
 import { ToastService } from '../core/toast.service';
 import { UiStore } from '../core/ui.store';
-import { formatDateShort, formatMinutes } from '../core/time';
+import { addDays, formatDateShort, formatMinutes } from '../core/time';
 
-type View = 'open' | 'today' | 'Backlog' | 'Blocked' | 'done' | 'all';
+type View = 'open' | 'today' | 'tomorrow' | 'Backlog' | 'Blocked' | 'done' | 'all';
 
 @Component({
   selector: 'app-tasks-page',
@@ -68,9 +68,22 @@ type View = 'open' | 'today' | 'Backlog' | 'Blocked' | 'done' | 'all';
                     @if (t.status === 'Done') {
                       <span class="cell-sub">{{ fmtDate(t.plannedDate) }}</span>
                     } @else if (t.plannedDate && t.plannedDate <= settings.today()) {
-                      <button type="button" class="pill pill-accent border-0" (click)="plan(t, false)" title="Remove from today">Today <span class="i i-x"></span></button>
+                      <div class="plan-cell">
+                        <button type="button" class="pill pill-accent border-0" (click)="plan(t, false)" title="Remove from today">Today <span class="i i-x"></span></button>
+                        <button type="button" class="btn btn-sm btn-ghost" (click)="moveTo(t, tomorrow())" title="Move to tomorrow"><span class="i i-arrow-right"></span> Tomorrow</button>
+                      </div>
+                    } @else if (t.plannedDate) {
+                      <div class="plan-cell">
+                        <button type="button" class="pill pill-info border-0" (click)="plan(t, false)" [title]="'Planned for ' + fmtDate(t.plannedDate) + '. Click to unplan.'">
+                          {{ t.plannedDate === tomorrow() ? 'Tomorrow' : fmtDate(t.plannedDate) }} <span class="i i-x"></span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-ghost" (click)="plan(t, true)" title="Do it today instead"><span class="i i-sunrise"></span> Today</button>
+                      </div>
                     } @else {
-                      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="plan(t, true)"><span class="i i-sunrise"></span> Today</button>
+                      <div class="plan-cell">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="plan(t, true)"><span class="i i-sunrise"></span> Today</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="moveTo(t, tomorrow())" title="Plan for tomorrow"><span class="i i-arrow-right"></span> Tomorrow</button>
+                      </div>
                     }
                   </td>
                   <td class="cell-mono text-end">{{ t.trackedMinutes > 0 ? fmt(t.trackedMinutes) : '' }}</td>
@@ -105,6 +118,7 @@ export class TasksPage {
   protected readonly views: { value: View; label: string }[] = [
     { value: 'open', label: 'Open' },
     { value: 'today', label: 'Today' },
+    { value: 'tomorrow', label: 'Tomorrow' },
     { value: 'Backlog', label: 'Backlog' },
     { value: 'Blocked', label: 'Blocked' },
     { value: 'done', label: 'Done' },
@@ -117,6 +131,7 @@ export class TasksPage {
   protected readonly tasks = signal<WorkTask[]>([]);
   protected readonly fmt = formatMinutes;
   protected readonly fmtDate = formatDateShort;
+  protected readonly tomorrow = () => addDays(this.settings.today(), 1);
   private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
@@ -142,7 +157,7 @@ export class TasksPage {
     const isStatus = v === 'Backlog' || v === 'Blocked';
     try {
       let list = await this.api.getTasks({
-        view: isStatus ? 'open' : v,
+        view: isStatus || v === 'tomorrow' ? 'open' : v,
         status: isStatus ? (v as TaskStatus) : null,
         projectId: this.projectId(),
         q: this.q() || null,
@@ -153,6 +168,7 @@ export class TasksPage {
         const q = this.q().trim().toLowerCase();
         list = list.filter((t) => (pid == null || t.projectId === pid) && (!q || t.title.toLowerCase().includes(q)));
       }
+      if (v === 'tomorrow') list = list.filter((t) => t.plannedDate === this.tomorrow());
       this.tasks.set(list);
     } catch (e) {
       this.toast.error(errorMessage(e));
@@ -170,6 +186,11 @@ export class TasksPage {
 
   async plan(t: WorkTask, today: boolean): Promise<void> {
     await this.mutate(() => this.api.planTask(t.id, today), today ? 'Planned for today' : 'Removed from today');
+  }
+
+  /** Plans the task for a later day (it shows up on the Today list then). */
+  async moveTo(t: WorkTask, date: string): Promise<void> {
+    await this.mutate(() => this.api.rollOver([t.id], date), `Moved to ${date === this.tomorrow() ? 'tomorrow' : formatDateShort(date)}`);
   }
 
   async startStop(t: WorkTask): Promise<void> {
