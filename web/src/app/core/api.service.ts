@@ -67,6 +67,8 @@ export class ApiService {
   getEntries(date: string) { return this.run(this.http.get<TimeEntry[]>(`${this.base}/time-entries`, { params: this.params({ date }) })); }
   createEntry(e: TimeEntryInput) { return this.run(this.http.post<TimeEntry>(`${this.base}/time-entries`, e)); }
   updateEntry(id: number, e: TimeEntryInput) { return this.run(this.http.put<TimeEntry>(`${this.base}/time-entries/${id}`, e)); }
+  /** Resolves an overlap: this entry keeps its time, the ones it overlaps are trimmed or split. */
+  keepEntry(id: number) { return this.run(this.http.post<TimeEntry>(`${this.base}/time-entries/${id}/keep`, {})); }
   deleteEntry(id: number) { return this.run(this.http.delete<void>(`${this.base}/time-entries/${id}`)); }
   fillGap(g: { start: string; end: string; projectId: number | null; kind: TimeEntryKind; note: string | null }) {
     return this.run(this.http.post<TimeEntry>(`${this.base}/time-entries/fill-gap`, g));

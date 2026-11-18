@@ -147,9 +147,8 @@ export class EntryEditor implements OnInit {
     };
     this.saving.set(true);
     try {
-      if (this.existing) await this.api.updateEntry(this.existing.id, input);
-      else await this.api.createEntry(input);
-      this.toast.show('Time saved');
+      const saved = this.existing ? await this.api.updateEntry(this.existing.id, input) : await this.api.createEntry(input);
+      this.toast.show(saved.adjusted?.length ? `Time saved. ${saved.adjusted.join('; ')}.` : 'Time saved');
       this.ui.entryEditor.set(null);
       this.timer.bump();
     } catch (e) {

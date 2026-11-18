@@ -485,4 +485,97 @@ public class Phase2Tests
         await Assert.ThrowsAsync<ApiException>(() => app.Settings.UpdateAsync(new SettingsInput(s.WorkdayStart, s.WorkdayEnd, 180, s.TimeZone, null, "late")));
         Assert.Null((await app.Settings.UpdateAsync(new SettingsInput(s.WorkdayStart, s.WorkdayEnd, 180, s.TimeZone, null, ""))).ReviewReminderTime);
     }
+
+    // ---- Overlapping entries: the entry being saved carves out its time ----
+
+    private static async Task<TimeEntryDto> Log(TestApp app, string project, int h1, int m1, int h2, int m2, string? note = null) =>
+        await app.Entries.CreateAsync(new TimeEntryInput(null, app.ProjectId(project), TimeEntryKind.Task, Utc(17, h1, m1), Utc(17, h2, m2), note));
+
+    private static async Task<List<(string Project, DateTime Start, DateTime? End)>> Entries(TestApp app) =>
+        (await app.Db.TimeEntries.Include(e => e.Project).OrderBy(e => e.StartedAt).ToListAsync())
+            .Select(e => (e.Project!.Name, e.StartedAt, e.EndedAt)).ToList();
+
+    [Fact]
+    public async Task Logging_inside_a_long_entry_splits_it_around_the_new_one()
+    {
+        using var app = new TestApp(Utc(17, 20));
+        await Log(app, "Origination", 13, 30, 18, 31, "long block");
+        var inner = await Log(app, "Extractor migration", 15, 50, 16, 20);
+
+        Assert.Equal(["Split \"Origination\" around this entry"], inner.Adjusted);
+        Assert.Equal(
+            [("Origination", Utc(17, 13, 30), (DateTime?)Utc(17, 15, 50)), ("Extractor migration", Utc(17, 15, 50), Utc(17, 16, 20)), ("Origination", Utc(17, 16, 20), Utc(17, 18, 31))],
+            await Entries(app));
+        Assert.Equal(2, await app.Db.TimeEntries.CountAsync(e => e.Note == "long block"));
+        Assert.Equal(301, (await app.Review.GetDayAsync(null)).Totals.TaskMinutes); // 13:30-18:31, counted once
+    }
+
+    [Fact]
+    public async Task Overlapping_one_end_trims_and_covering_replaces()
+    {
+        using var app = new TestApp(Utc(17, 20));
+        await Log(app, "Admin", 14, 0, 15, 0);
+        await Log(app, "Origination", 16, 0, 16, 30);
+
+        var r = await Log(app, "Extractor migration", 14, 30, 16, 45);
+
+        Assert.Contains("Trimmed the end of \"Admin\"", r.Adjusted!);
+        Assert.Contains("Replaced \"Origination\"", r.Adjusted!);
+        Assert.Equal([("Admin", Utc(17, 14), (DateTime?)Utc(17, 14, 30)), ("Extractor migration", Utc(17, 14, 30), Utc(17, 16, 45))], await Entries(app));
+    }
+
+    [Fact]
+    public async Task Editing_only_carves_newly_covered_time()
+    {
+        using var app = new TestApp(Utc(17, 20));
+        var outer = await Log(app, "Origination", 14, 0, 16, 0);
+        // An overlap that already exists (e.g. from before this rule): saving the long entry's note leaves it alone.
+        app.Db.TimeEntries.Add(new TimeEntry { ProjectId = app.ProjectId("Admin"), Kind = TimeEntryKind.Task, StartedAt = Utc(17, 15), EndedAt = Utc(17, 15, 30) });
+        await app.Db.SaveChangesAsync();
+
+        var saved = await app.Entries.UpdateAsync(outer.Id, new TimeEntryInput(null, app.ProjectId("Origination"), TimeEntryKind.Task, Utc(17, 14), Utc(17, 16), "new note"));
+        Assert.Empty(saved.Adjusted!);
+        Assert.Equal(2, await app.Db.TimeEntries.CountAsync());
+
+        var review = await app.Review.GetDayAsync(null);
+        var overlap = Assert.Single(review.EntryOverlaps);
+        Assert.Equal("Admin", overlap.KeepTitle);
+        Assert.Equal(30, overlap.Minutes);
+
+        // One click on the review warning resolves it: the short entry keeps its time.
+        var kept = await app.Entries.KeepAsync(overlap.KeepEntryId);
+        Assert.Equal(["Split \"Origination\" around this entry"], kept.Adjusted);
+        Assert.Empty((await app.Review.GetDayAsync(null)).EntryOverlaps);
+    }
+
+    [Fact]
+    public async Task Logging_inside_the_running_timer_splits_it_and_it_keeps_running()
+    {
+        using var app = new TestApp(Utc(17, 14));
+        var task = (await app.Tasks.QuickAddAsync(new QuickAddRequest("Deep work #origination", true))).Task;
+        await app.Timer.StartAsync(new StartTimerRequest(task.Id, null, null, null));
+        app.Clock.UtcNow = Utc(17, 16);
+
+        await Log(app, "Admin", 14, 30, 15, 0);
+
+        var running = Assert.Single(await app.Db.TimeEntries.Where(e => e.EndedAt == null).ToListAsync());
+        Assert.Equal(Utc(17, 15), running.StartedAt);
+        Assert.Equal(task.Id, running.TaskId);
+        Assert.Equal(Utc(17, 14, 30), (await app.Db.TimeEntries.SingleAsync(e => e.TaskId == task.Id && e.EndedAt != null)).EndedAt);
+    }
+
+    [Fact]
+    public async Task Slivers_under_a_minute_are_dropped()
+    {
+        using var app = new TestApp(Utc(17, 20));
+        await Log(app, "Admin", 14, 0, 15, 0);
+        var r = await Log(app, "Origination", 14, 0, 14, 59); // leaves 1 minute: kept
+        Assert.Contains("Trimmed the start of \"Admin\"", r.Adjusted!);
+        Assert.Equal(Utc(17, 14, 59), (await app.Db.TimeEntries.SingleAsync(e => e.Project!.Name == "Admin")).StartedAt);
+
+        // Covering all but 30 seconds of what's left: the 30-second sliver goes too.
+        r = await app.Entries.CreateAsync(new TimeEntryInput(null, app.ProjectId("Origination"), TimeEntryKind.Task, Utc(17, 14, 59), Utc(17, 14, 59).AddSeconds(30), null));
+        Assert.Equal(["Replaced \"Admin\""], r.Adjusted);
+        Assert.False(await app.Db.TimeEntries.AnyAsync(e => e.Project!.Name == "Admin"));
+    }
 }

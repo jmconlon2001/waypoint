@@ -21,33 +21,113 @@ public sealed class TimeEntryService(WaypointDbContext db, SettingsService setti
         return items.Select(e => e.ToDto(now)).ToList();
     }
 
+    /// <summary>Pieces of a carved entry shorter than this are dropped rather than kept as slivers.</summary>
+    public static readonly TimeSpan MinPiece = TimeSpan.FromMinutes(1);
+
+    /// <summary>Adds an entry. It wins over any entry it overlaps: those are trimmed, split around it, or replaced.</summary>
     public async Task<TimeEntryDto> CreateAsync(TimeEntryInput input, CancellationToken ct = default)
     {
         var entry = new TimeEntry();
         await ApplyAsync(entry, input, ct);
+        var adjusted = await CarveAsync(entry, [new Interval(entry.StartedAt, entry.EndedAt!.Value)], ct);
         db.TimeEntries.Add(entry);
         await db.SaveChangesAsync(ct);
-        return await GetAsync(entry.Id, ct);
+        return (await GetAsync(entry.Id, ct)) with { Adjusted = adjusted };
     }
 
+    /// <summary>
+    /// Edits an entry. Only time it newly covers carves other entries, so changing the note (or shortening it)
+    /// never touches its neighbours.
+    /// </summary>
     public async Task<TimeEntryDto> UpdateAsync(int id, TimeEntryInput input, CancellationToken ct = default)
     {
         var entry = await db.TimeEntries.FindAsync([id], ct) ?? throw ApiException.NotFound("Time entry");
         if (entry.EndedAt is null)
             throw ApiException.BadRequest("Stop the running timer before editing it.");
+        var before = new Interval(entry.StartedAt, entry.EndedAt.Value);
         await ApplyAsync(entry, input, ct);
+        var added = Intervals.Subtract(new Interval(entry.StartedAt, entry.EndedAt!.Value), [before]);
+        var adjusted = await CarveAsync(entry, added, ct);
         await db.SaveChangesAsync(ct);
-        return await GetAsync(id, ct);
+        return (await GetAsync(id, ct)) with { Adjusted = adjusted };
+    }
+
+    /// <summary>Resolves an existing overlap: this entry keeps its whole time and the entries it overlaps give way.</summary>
+    public async Task<TimeEntryDto> KeepAsync(int id, CancellationToken ct = default)
+    {
+        var entry = await db.TimeEntries.FindAsync([id], ct) ?? throw ApiException.NotFound("Time entry");
+        if (entry.EndedAt is null) throw ApiException.BadRequest("Stop the running timer first.");
+        var adjusted = await CarveAsync(entry, [new Interval(entry.StartedAt, entry.EndedAt.Value)], ct);
+        await db.SaveChangesAsync(ct);
+        return (await GetAsync(id, ct)) with { Adjusted = adjusted };
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct = default)
     {
         var entry = await db.TimeEntries.FindAsync([id], ct) ?? throw ApiException.NotFound("Time entry");
+        await RemoveAsync(entry, ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Makes room for <paramref name="winner"/> in <paramref name="ranges"/>: every other entry overlapping a range
+    /// is trimmed (overlap at one end), split into before/after pieces (winner inside it), or removed (fully
+    /// covered). A running timer that gets split keeps running from the end of the range. Does not save.
+    /// Returns a short description of each change, for the UI.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> CarveAsync(TimeEntry winner, IReadOnlyList<Interval> ranges, CancellationToken ct)
+    {
+        var notes = new List<string>();
+        foreach (var range in ranges.Where(r => !r.IsEmpty))
+        {
+            var others = await db.TimeEntries.Include(e => e.Task).Include(e => e.Project)
+                .Where(e => e.Id != winner.Id && e.StartedAt < range.End && (e.EndedAt == null || e.EndedAt > range.Start))
+                .ToListAsync(ct);
+            foreach (var o in others)
+            {
+                if (ReferenceEquals(o, winner)) continue;
+                var name = $"\"{o.Task?.Title ?? o.Project?.Name ?? "Untracked"}\"";
+                var keepBefore = range.Start - o.StartedAt >= MinPiece;
+                var keepAfter = o.EndedAt is null || o.EndedAt.Value - range.End >= MinPiece;
+
+                if (keepBefore && keepAfter)
+                {
+                    db.TimeEntries.Add(new TimeEntry
+                    {
+                        TaskId = o.TaskId, ProjectId = o.ProjectId, Kind = o.Kind, Note = o.Note,
+                        StartedAt = range.End, EndedAt = o.EndedAt,
+                    });
+                    o.EndedAt = range.Start;
+                    notes.Add($"Split {name} around this entry");
+                }
+                else if (keepBefore)
+                {
+                    o.EndedAt = range.Start;
+                    notes.Add($"Trimmed the end of {name}");
+                }
+                else if (keepAfter)
+                {
+                    o.StartedAt = range.End;
+                    notes.Add($"Trimmed the start of {name}");
+                }
+                else
+                {
+                    await RemoveAsync(o, ct);
+                    notes.Add($"Replaced {name}");
+                }
+            }
+            // Later ranges must see pieces created here (only possible when editing a saved entry).
+            if (winner.Id != 0) await db.SaveChangesAsync(ct);
+        }
+        return notes.Distinct().ToList();
+    }
+
+    private async Task RemoveAsync(TimeEntry entry, CancellationToken ct)
+    {
         // Interruptions that paused this entry keep their own record; just drop the link.
-        var paused = await db.Interruptions.Where(i => i.PausedTimeEntryId == id).ToListAsync(ct);
+        var paused = await db.Interruptions.Where(i => i.PausedTimeEntryId == entry.Id).ToListAsync(ct);
         foreach (var i in paused) i.PausedTimeEntryId = null;
         db.TimeEntries.Remove(entry);
-        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Fills a gap from the daily review in one step.</summary>

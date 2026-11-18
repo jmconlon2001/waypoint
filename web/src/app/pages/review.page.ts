@@ -178,6 +178,22 @@ export class ReviewPage {
     }
   }
 
+  /** Overlapping entries: the chosen one keeps its time, the other is trimmed or split around it. */
+  async keepEntry(id: number): Promise<void> {
+    try {
+      const r = await this.api.keepEntry(id);
+      this.toast.show(r.adjusted?.length ? `${r.adjusted.join('; ')}.` : 'Nothing to change');
+      await this.timer.refresh();
+      this.timer.bump();
+    } catch (e) {
+      this.toast.error(errorMessage(e));
+    }
+  }
+
+  isRunningEntry(id: number): boolean {
+    return this.review()?.entries.some((e) => e.id === id && !e.endedAt) ?? false;
+  }
+
   /** Opens the entry that ran during a meeting so its times can be trimmed. */
   fixOverlap(o: Overlap): void {
     const e = this.review()?.entries.find((x) => x.id === o.entryId);

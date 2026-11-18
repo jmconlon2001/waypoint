@@ -103,6 +103,14 @@ Parsing happens on the server (`Domain/QuickAddParser.cs`):
 - `!1`-`!3` sets the priority.
 - An unknown or ambiguous project still adds the task, with a warning.
 
+**Overlapping time entries.** The entry being saved wins (`TimeEntryService.CarveAsync`). Each entry it overlaps is:
+
+- trimmed, if the overlap is at one end;
+- split into before and after pieces, if the new entry sits inside it. A running timer split this way keeps running from the end of the new entry;
+- removed, if it's fully covered.
+
+Leftover pieces under 1 minute are dropped. On an edit, only time the entry newly covers carves, so changing a note never touches neighbours. The save response lists what changed (`adjusted`), and the UI shows it as a toast. Overlaps that already exist are listed in the review (`entryOverlaps`) with a one-click `POST /api/time-entries/{id}/keep`.
+
 ## Phase 2: calendar and metrics
 
 **Calendar sync.** `CalendarService.SyncAsync`:

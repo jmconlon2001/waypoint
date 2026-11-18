@@ -52,7 +52,12 @@ public sealed record TimeEntryDto(
     DateTime StartedAt,
     DateTime? EndedAt,
     string? Note,
-    double Minutes);
+    double Minutes,
+    // Set on save: entries this one trimmed, split or replaced (null otherwise).
+    IReadOnlyList<string>? Adjusted = null);
+
+/// <summary>Two time entries covering the same time. Keep = the shorter one (usually the specific entry logged later).</summary>
+public sealed record EntryOverlapDto(int KeepEntryId, string KeepTitle, int OtherEntryId, string OtherTitle, double Minutes);
 
 public sealed record TimeEntryInput(
     int? TaskId,
@@ -159,6 +164,7 @@ public sealed record ReviewDto(
     DailyTotalsDto Totals,
     IReadOnlyList<CalendarEventDto> Meetings,
     IReadOnlyList<OverlapDto> Overlaps,
+    IReadOnlyList<EntryOverlapDto> EntryOverlaps,
     IReadOnlyList<FocusBlockDto> FocusBlocks,
     IReadOnlyList<TaskDto> Unfinished,
     PlannedVsActualDto Plan);

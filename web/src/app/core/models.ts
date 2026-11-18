@@ -75,6 +75,16 @@ export interface TimeEntry {
   endedAt: string | null;
   note: string | null;
   minutes: number;
+  /** Set on save: other entries this one trimmed, split or replaced. */
+  adjusted?: string[] | null;
+}
+
+export interface EntryOverlap {
+  keepEntryId: number;
+  keepTitle: string;
+  otherEntryId: number;
+  otherTitle: string;
+  minutes: number;
 }
 
 export interface TimeEntryInput {
@@ -195,6 +205,7 @@ export interface Review {
   totals: DailyTotals;
   meetings: CalendarEvent[];
   overlaps: Overlap[];
+  entryOverlaps: EntryOverlap[];
   focusBlocks: FocusBlock[];
   unfinished: WorkTask[];
   plan: PlannedVsActual;

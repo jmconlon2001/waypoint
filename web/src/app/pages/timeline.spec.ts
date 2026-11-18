@@ -30,6 +30,7 @@ function review(): Review {
         countsAsMeeting: false, isPlannedFocus: false, excludedReason: 'All-day', minutes: 1440 },
     ],
     overlaps: [],
+    entryOverlaps: [],
     focusBlocks: [],
     unfinished: [],
     plan: { date: '2026-11-17', planned: [], plannedCount: 0, plannedDoneCount: 0, plannedMinutes: 0, unplannedTaskMinutes: 0,

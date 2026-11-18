@@ -81,6 +81,7 @@ public static class ApiEndpoints
         });
         entries.MapPost("/fill-gap", (GapFillRequest input, TimeEntryService s, CancellationToken ct) => s.FillGapAsync(input, ct));
         entries.MapPut("/{id:int}", (int id, TimeEntryInput input, TimeEntryService s, CancellationToken ct) => s.UpdateAsync(id, input, ct));
+        entries.MapPost("/{id:int}/keep", (int id, TimeEntryService s, CancellationToken ct) => s.KeepAsync(id, ct));
         entries.MapDelete("/{id:int}", async (int id, TimeEntryService s, CancellationToken ct) =>
         {
             await s.DeleteAsync(id, ct);
