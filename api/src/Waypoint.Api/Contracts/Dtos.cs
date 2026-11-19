@@ -115,16 +115,21 @@ public sealed record SettingsDto(
     string TimeZone,
     IReadOnlyList<string> ProjectColors,
     int MeetingMaxMinutes,
-    string? ReviewReminderTime);
+    string? ReviewReminderTime,
+    int FutureEntryMaxMinutes);
 
-/// <summary>MeetingMaxMinutes null keeps the current value. ReviewReminderTime null or "" turns the reminder off.</summary>
+/// <summary>
+/// MeetingMaxMinutes and FutureEntryMaxMinutes null keep the current value. ReviewReminderTime null or "" turns the
+/// reminder off.
+/// </summary>
 public sealed record SettingsInput(
     string WorkdayStart,
     string WorkdayEnd,
     int TimerWarningMinutes,
     string TimeZone,
     int? MeetingMaxMinutes = null,
-    string? ReviewReminderTime = null);
+    string? ReviewReminderTime = null,
+    int? FutureEntryMaxMinutes = null);
 
 public sealed record GapDto(DateTime Start, DateTime End, double Minutes);
 public sealed record ProjectTotalDto(int? ProjectId, string Name, string? Color, double Minutes);

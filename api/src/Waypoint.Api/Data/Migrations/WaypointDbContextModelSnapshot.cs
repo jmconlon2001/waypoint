@@ -270,6 +270,12 @@ namespace Waypoint.Api.Data.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("calendar_last_sync_error");
 
+                    b.Property<int>("FutureEntryMaxMinutes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(240)
+                        .HasColumnName("future_entry_max_minutes");
+
                     b.Property<int>("MeetingMaxMinutes")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")

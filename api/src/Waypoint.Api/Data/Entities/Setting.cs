@@ -14,6 +14,8 @@ public class Setting
 
     /// <summary>Calendar events longer than this (holds, OOO, trainings) don't count as meeting time.</summary>
     public int MeetingMaxMinutes { get; set; } = 120;
+    /// <summary>How far past "now" a time entry may end (e.g. logging a block you're about to start). 0 = no future entries.</summary>
+    public int FutureEntryMaxMinutes { get; set; } = 240;
     /// <summary>Local time for the daily review reminder; null = off.</summary>
     public TimeOnly? ReviewReminderTime { get; set; }
 

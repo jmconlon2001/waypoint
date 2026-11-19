@@ -144,7 +144,12 @@ public sealed class TimeEntryService(WaypointDbContext db, SettingsService setti
         var end = Mapping.TruncateToSecond(Mapping.Utc(input.EndedAt));
         if (end <= start) throw ApiException.BadRequest("End must be after start.");
         if (end - start > TimeSpan.FromHours(24)) throw ApiException.BadRequest("A time entry can't be longer than 24 hours.");
-        if (end > Now().AddMinutes(1)) throw ApiException.BadRequest("Time entries can't end in the future.");
+        // A small allowance (1 min) covers clock skew; the rest is the configurable future window.
+        var futureMinutes = (await settings.GetAsync(ct)).FutureEntryMaxMinutes;
+        if (end > Now().AddMinutes(futureMinutes + 1))
+            throw ApiException.BadRequest(futureMinutes == 0
+                ? "Time entries can't end in the future."
+                : $"Time entries can end at most {FormatLimit(futureMinutes)} from now (see Projects & settings).");
 
         int? projectId = input.ProjectId;
         if (input.TaskId is not null)
@@ -164,6 +169,9 @@ public sealed class TimeEntryService(WaypointDbContext db, SettingsService setti
         entry.EndedAt = end;
         entry.Note = string.IsNullOrWhiteSpace(input.Note) ? null : input.Note.Trim();
     }
+
+    private static string FormatLimit(int minutes) =>
+        minutes % 60 == 0 ? $"{minutes / 60} hour{(minutes == 60 ? "" : "s")}" : $"{minutes} minutes";
 
     private IQueryable<TimeEntry> Query() => db.TimeEntries.Include(e => e.Task).Include(e => e.Project);
 

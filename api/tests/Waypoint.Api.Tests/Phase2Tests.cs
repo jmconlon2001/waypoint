@@ -595,4 +595,24 @@ public class Phase2Tests
         Assert.True(r.Interruption.CouldWait);
         Assert.Equal(InterruptionSource.WalkUp, r.Interruption.SourceType);
     }
+
+    [Fact]
+    public async Task Entries_may_end_up_to_the_configured_limit_in_the_future()
+    {
+        using var app = new TestApp(); // 15:00 UTC
+        TimeEntryInput Block(int endHour) =>
+            new(null, app.ProjectId("Admin"), TimeEntryKind.Task, Utc(17, 15), Utc(17, endHour), "Planned block");
+
+        Assert.Equal(240, (await app.Settings.GetDtoAsync()).FutureEntryMaxMinutes);
+        await app.Entries.CreateAsync(Block(19));                                   // 4 hours ahead: allowed
+        var ex = await Assert.ThrowsAsync<ApiException>(() => app.Entries.CreateAsync(Block(20))); // 5 hours: not
+        Assert.Contains("4 hours", ex.Message);
+
+        var s = await app.Settings.GetDtoAsync();
+        await app.Settings.UpdateAsync(new SettingsInput(s.WorkdayStart, s.WorkdayEnd, s.TimerWarningMinutes, s.TimeZone, FutureEntryMaxMinutes: 0));
+        ex = await Assert.ThrowsAsync<ApiException>(() => app.Entries.CreateAsync(Block(16)));
+        Assert.Equal("Time entries can't end in the future.", ex.Message);
+        await Assert.ThrowsAsync<ApiException>(() =>
+            app.Settings.UpdateAsync(new SettingsInput(s.WorkdayStart, s.WorkdayEnd, s.TimerWarningMinutes, s.TimeZone, FutureEntryMaxMinutes: 2000)));
+    }
 }

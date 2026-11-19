@@ -200,6 +200,11 @@ interface ProjectDraft { id: number | null; name: string; color: string; active:
                 <div class="form-text">Longer events (holds, OOO, trainings) don't count as meeting time.</div>
               </div>
               <div class="col-sm-6">
+                <label class="form-label" for="s-future">Future entries (minutes)</label>
+                <input id="s-future" name="future" type="number" min="0" max="1440" class="form-control mono-input" [(ngModel)]="futureEntryMaxMinutes" />
+                <div class="form-text">How far ahead a logged entry may end, e.g. a block you're about to start. 0 = none. Default 240.</div>
+              </div>
+              <div class="col-sm-6">
                 <label class="form-label" for="s-remind">Daily review reminder</label>
                 <input id="s-remind" name="remind" type="time" class="form-control mono-input" [(ngModel)]="reviewReminderTime" />
                 <div class="form-text">Leave empty for no reminder. Shows while Waypoint is open.</div>
@@ -253,6 +258,7 @@ export class SettingsPage implements OnInit {
   protected timeZone = 'America/New_York';
   protected meetingMaxMinutes = 120;
   protected reviewReminderTime = '';
+  protected futureEntryMaxMinutes = 240;
   protected readonly calendar = signal<CalendarStatus | null>(null);
   protected readonly rules = signal<MeetingRule[]>([]);
   protected readonly syncing = signal(false);
@@ -275,6 +281,7 @@ export class SettingsPage implements OnInit {
         this.timeZone = s.timeZone;
         this.meetingMaxMinutes = s.meetingMaxMinutes;
         this.reviewReminderTime = s.reviewReminderTime ?? '';
+        this.futureEntryMaxMinutes = s.futureEntryMaxMinutes;
       }
       this.people.set(await this.api.searchPeople(''));
       const [c, r] = await Promise.all([this.api.getCalendarStatus(), this.api.getMeetingRules()]);
@@ -330,6 +337,7 @@ export class SettingsPage implements OnInit {
         workdayStart: this.workdayStart, workdayEnd: this.workdayEnd,
         timerWarningMinutes: Number(this.timerWarningMinutes) || 0, timeZone: this.timeZone.trim(),
         meetingMaxMinutes: Number(this.meetingMaxMinutes) || 120, reviewReminderTime: this.reviewReminderTime || null,
+        futureEntryMaxMinutes: Math.max(0, Math.round(Number(this.futureEntryMaxMinutes) || 0)),
       });
       this.settings.settings.set(s);
       await this.timer.refresh(true);

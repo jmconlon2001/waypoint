@@ -69,6 +69,7 @@ public class WaypointDbContext(DbContextOptions<WaypointDbContext> options) : Db
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.TimeZone).HasMaxLength(64).IsRequired();
             e.Property(x => x.MeetingMaxMinutes).HasDefaultValue(120);
+            e.Property(x => x.FutureEntryMaxMinutes).HasDefaultValue(240);
             e.Property(x => x.CalendarIcsUrl).HasMaxLength(2048);
             e.Property(x => x.CalendarInternalDomains).HasMaxLength(500);
             e.Property(x => x.CalendarLastSyncError).HasMaxLength(1000);

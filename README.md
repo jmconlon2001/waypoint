@@ -96,6 +96,7 @@ Dark mode, which follows your OS or a saved choice:
   - work hours, used for gap detection;
   - the long-timer warning;
   - the longest event that still counts as a meeting (default 120 minutes, so holds, OOO and trainings don't count);
+  - how far ahead a logged entry may end (default 4 hours, 0 = none), for blocks you're about to start;
   - a **daily review reminder** time;
   - your time zone.
 - **Google Calendar**: paste your calendar's *Secret address in iCal format* (Google Calendar → Settings → your calendar → Integrate calendar). Waypoint syncs it every 15 minutes, and on demand, read-only.

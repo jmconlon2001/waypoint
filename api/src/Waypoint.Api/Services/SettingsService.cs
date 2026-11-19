@@ -36,10 +36,13 @@ public sealed class SettingsService(WaypointDbContext db)
 
         if (input.MeetingMaxMinutes is < 15 or > 24 * 60)
             throw ApiException.BadRequest("The meeting length limit must be between 15 and 1440 minutes.");
+        if (input.FutureEntryMaxMinutes is < 0 or > 24 * 60)
+            throw ApiException.BadRequest("The future-entry limit must be between 0 (none) and 1440 minutes.");
         TimeOnly? reminder = string.IsNullOrWhiteSpace(input.ReviewReminderTime) ? null : ParseTime(input.ReviewReminderTime, "Review reminder");
 
         var s = await GetAsync(ct);
         if (input.MeetingMaxMinutes is int max) s.MeetingMaxMinutes = max;
+        if (input.FutureEntryMaxMinutes is int future) s.FutureEntryMaxMinutes = future;
         s.ReviewReminderTime = reminder;
         s.WorkdayStart = start;
         s.WorkdayEnd = end;
@@ -53,7 +56,7 @@ public sealed class SettingsService(WaypointDbContext db)
         s.WorkdayStart.ToString("HH:mm", CultureInfo.InvariantCulture),
         s.WorkdayEnd.ToString("HH:mm", CultureInfo.InvariantCulture),
         s.TimerWarningMinutes, s.TimeZone, ProjectPalette.Colors, s.MeetingMaxMinutes,
-        s.ReviewReminderTime?.ToString("HH:mm", CultureInfo.InvariantCulture));
+        s.ReviewReminderTime?.ToString("HH:mm", CultureInfo.InvariantCulture), s.FutureEntryMaxMinutes);
 
     private static TimeOnly ParseTime(string? value, string label) =>
         TimeOnly.TryParseExact(value?.Trim(), ["HH:mm", "H:mm", "HH:mm:ss"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var t)

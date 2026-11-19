@@ -156,6 +156,8 @@ export interface Settings {
   projectColors: string[];
   meetingMaxMinutes: number;
   reviewReminderTime: string | null;
+  /** How far past now a time entry may end. 0 = no future entries. */
+  futureEntryMaxMinutes: number;
 }
 
 export type SettingsInput = Omit<Settings, 'projectColors'>;
